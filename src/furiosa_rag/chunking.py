@@ -35,4 +35,3 @@ class PageChunker:
                 if start + self.chunk_size >= len(words):
                     break
         return chunks
-

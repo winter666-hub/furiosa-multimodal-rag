@@ -42,4 +42,3 @@ class CosineRetriever:
             RetrievedChunk(chunk=chunks[int(index)], retrieval_score=float(scores[index]))
             for index in indices
         ]
-

@@ -40,10 +40,14 @@ def create_pdf(path: Path) -> None:
     objects = [
         b"<< /Type /Catalog /Pages 2 0 R >>",
         b"<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>",
-        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
-        b"/Resources << /Font << /F1 5 0 R >> >> /Contents 6 0 R >>",
-        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
-        b"/Resources << /Font << /F1 5 0 R >> >> /Contents 7 0 R >>",
+        (
+            b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+            b"/Resources << /Font << /F1 5 0 R >> >> /Contents 6 0 R >>"
+        ),
+        (
+            b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+            b"/Resources << /Font << /F1 5 0 R >> >> /Contents 7 0 R >>"
+        ),
         b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
         f"<< /Length {len(page_one)} >>\nstream\n".encode() + page_one + b"\nendstream",
         f"<< /Length {len(page_two)} >>\nstream\n".encode() + page_two + b"\nendstream",
@@ -70,4 +74,3 @@ def create_pdf(path: Path) -> None:
 
 if __name__ == "__main__":
     create_pdf(Path("data/day1_text_rag_sample.pdf"))
-

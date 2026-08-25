@@ -14,7 +14,6 @@ import numpy as np
 
 from furiosa_rag.models import Chunk
 
-
 CACHE_VERSION = 1
 
 
@@ -112,4 +111,3 @@ class DocumentEmbeddingCache:
         finally:
             temporary_path.unlink(missing_ok=True)
         return cache_path
-

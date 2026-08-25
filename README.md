@@ -40,6 +40,10 @@ bash scripts/start_ssh_tunnel.sh
 이 터미널은 연결 테스트와 앱 실행 중 계속 열어 둡니다. 스크립트는 기본적으로 NPU 서버의
 `8000~8003`을 Windows PC의 `127.0.0.1:8000~8003`으로 전달합니다. 서버에서 네 모델이
 다른 포트를 사용하면 `.ssh-tunnel.env`의 `REMOTE_*_PORT`만 변경하면 됩니다.
+Vision이 단독으로 원격 8000에서 실행되는 현재 테스트 구성이라면 `ENABLE_LLM=false`,
+`ENABLE_EMBEDDING=false`, `ENABLE_RERANKER=false`, `LOCAL_VISION_PORT=8000`,
+`REMOTE_VISION_PORT=8000`으로 설정하고 `FURIOSA_VISION_BASE_URL=http://localhost:8000/v1`을
+사용할 수 있습니다. 애플리케이션의 endpoint 기준값은 포트가 아니라 `.env` 설정입니다.
 
 직접 명령을 사용할 경우 LLM 한 개에 대한 최소 명령은 다음과 같습니다.
 
@@ -113,6 +117,16 @@ Text RAG 실행 시 PDF hash, chunk 설정, embedding 모델 ID가 같은 캐시
 $env:PYTHONPATH = "src"
 python -m furiosa_rag.cli.run_rag "data/attention_is_all_you_need.pdf" "Why do the authors use multi-head attention?" --rebuild-cache
 ```
+
+멀티모달 경로는 reranking 결과의 최상위 페이지 하나만 렌더링하고 Vision에 전달하며,
+Vision 호출 실패 시 같은 검색 결과를 사용한 Text RAG로 자동 fallback합니다.
+Vision 응답 길이는 `FURIOSA_VISION_MAX_TOKENS`로 조절하며 기본값은 `256`입니다.
+
+```powershell
+python -m furiosa_rag.cli.run_multimodal_rag "data/attention_is_all_you_need.pdf" "Figure 1에서 Encoder와 Decoder의 차이는?" --top-k 3 --top-n 3
+```
+
+일회성 benchmark에서는 `--vision-max-tokens 128`처럼 환경설정을 덮어쓸 수 있습니다.
 
 Top-k별 latency 비교 결과는 다음 명령으로 CSV에 저장할 수 있습니다.
 

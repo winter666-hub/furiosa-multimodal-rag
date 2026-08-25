@@ -50,14 +50,23 @@ class FuriosaReranker:
             },
         )
         try:
+            rows = payload["results"]
+            if not isinstance(rows, list):
+                raise TypeError
+            indices = [row["index"] for row in rows]
+            if any(type(index) is not int for index in indices):
+                raise TypeError
+            if len(indices) != len(set(indices)):
+                raise ValueError
+            if any(index < 0 or index >= len(items) for index in indices):
+                raise IndexError
             return [
                 RankedDocument(
-                    index=int(row["index"]),
+                    index=index,
                     score=float(row["relevance_score"]),
-                    text=items[int(row["index"])],
+                    text=items[index],
                 )
-                for row in payload["results"]
+                for row, index in zip(rows, indices, strict=True)
             ]
         except (KeyError, IndexError, TypeError, ValueError) as exc:
             raise FuriosaApiError("Reranker response has an invalid results field") from exc
-

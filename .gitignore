@@ -19,3 +19,15 @@ id_rsa_*
 *.pem
 *.key
 data/*.pdf
+
+data/
+
+direct_npu_run_*.txt
+npu_run_*.txt
+vision_*_run_*.txt
+vision_*_check_*.txt
+
+*.egg-info/
+src/*.egg-info/
+
+vl_test.py

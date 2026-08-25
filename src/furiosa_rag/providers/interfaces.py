@@ -63,4 +63,3 @@ class TranslationProvider(Protocol):
         target_language: str,
         source_language: str | None = None,
     ) -> str: ...
-

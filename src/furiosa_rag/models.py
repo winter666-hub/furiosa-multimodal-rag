@@ -31,3 +31,20 @@ class RagAnswer:
     sources: tuple[RetrievedChunk, ...]
     latency_ms: dict[str, float | bool]
     cache_path: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class VisionUsage:
+    selected_page: int | None
+    used: bool
+    model: str
+    error: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class MultimodalRagAnswer:
+    answer: str
+    sources: tuple[RetrievedChunk, ...]
+    vision: VisionUsage
+    latency_ms: dict[str, float | bool]
+    cache_path: str | None = None

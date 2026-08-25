@@ -93,13 +93,15 @@ class FuriosaClient:
                 for item in payload.get("data", [])
                 if isinstance(item, dict) and isinstance(item.get("id"), str)
             )
+            model_found = endpoint.model in models
             return ConnectionResult(
                 endpoint=endpoint.name,
                 url=url,
                 expected_model=endpoint.model,
                 available_models=models,
                 latency_ms=(time.perf_counter() - started) * 1000,
-                ok=True,
+                ok=model_found,
+                error=None if model_found else f"Expected model not found: {endpoint.model}",
             )
         except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, OSError) as exc:
             return ConnectionResult(

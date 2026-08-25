@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Multimodal RAG agent backed by Furiosa NPU model APIs"
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = ["numpy>=2.0,<3.0", "pypdf>=5.0,<7.0"]
+dependencies = ["numpy>=2.0,<3.0", "pypdf>=5.0,<7.0", "PyMuPDF>=1.24,<2.0"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "ruff>=0.6"]
@@ -17,6 +17,7 @@ dev = ["pytest>=8.0", "ruff>=0.6"]
 furiosa-check = "furiosa_rag.cli.check_connection:main"
 furiosa-smoke-test = "furiosa_rag.cli.smoke_test:main"
 furiosa-rag = "furiosa_rag.cli.run_rag:main"
+furiosa-multimodal-rag = "furiosa_rag.cli.run_multimodal_rag:main"
 furiosa-rag-benchmark = "furiosa_rag.cli.benchmark:main"
 
 

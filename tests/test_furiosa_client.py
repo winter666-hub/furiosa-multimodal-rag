@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+from typing import Self
 from unittest.mock import patch
 
 from furiosa_rag.clients import FuriosaClient
@@ -14,7 +15,7 @@ class FakeResponse:
     def read(self) -> bytes:
         return self._body
 
-    def __enter__(self) -> "FakeResponse":
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *args: object) -> None:
@@ -47,3 +48,11 @@ def test_check_connection_adds_v1_and_reports_invalid_json() -> None:
     assert result.error is not None
     assert "JSONDecodeError" in result.error
 
+
+def test_check_connection_fails_when_expected_model_is_missing() -> None:
+    response = FakeResponse(b'{"data":[{"id":"different-model"}]}')
+    endpoint = ModelEndpoint("vision", "http://localhost:8000/v1", "expected-model")
+    with patch("furiosa_rag.clients.furiosa.urlopen", return_value=response):
+        result = FuriosaClient().check_connection(endpoint)
+    assert result.ok is False
+    assert result.error == "Expected model not found: expected-model"

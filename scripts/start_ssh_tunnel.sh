@@ -29,6 +29,28 @@ REMOTE_LLM_PORT="${REMOTE_LLM_PORT:-8000}"
 REMOTE_VISION_PORT="${REMOTE_VISION_PORT:-8001}"
 REMOTE_EMBEDDING_PORT="${REMOTE_EMBEDDING_PORT:-8002}"
 REMOTE_RERANKER_PORT="${REMOTE_RERANKER_PORT:-8003}"
+ENABLE_LLM="${ENABLE_LLM:-true}"
+ENABLE_VISION="${ENABLE_VISION:-true}"
+ENABLE_EMBEDDING="${ENABLE_EMBEDDING:-true}"
+ENABLE_RERANKER="${ENABLE_RERANKER:-true}"
+
+forward_args=()
+[[ "$ENABLE_LLM" == "true" ]] && forward_args+=(
+  -L "127.0.0.1:${LOCAL_LLM_PORT}:127.0.0.1:${REMOTE_LLM_PORT}"
+)
+[[ "$ENABLE_VISION" == "true" ]] && forward_args+=(
+  -L "127.0.0.1:${LOCAL_VISION_PORT}:127.0.0.1:${REMOTE_VISION_PORT}"
+)
+[[ "$ENABLE_EMBEDDING" == "true" ]] && forward_args+=(
+  -L "127.0.0.1:${LOCAL_EMBEDDING_PORT}:127.0.0.1:${REMOTE_EMBEDDING_PORT}"
+)
+[[ "$ENABLE_RERANKER" == "true" ]] && forward_args+=(
+  -L "127.0.0.1:${LOCAL_RERANKER_PORT}:127.0.0.1:${REMOTE_RERANKER_PORT}"
+)
+if [[ ${#forward_args[@]} -eq 0 ]]; then
+  echo "At least one ENABLE_* setting must be true." >&2
+  exit 2
+fi
 
 echo "Opening Furiosa API tunnels through ${SSH_USER}@${SSH_HOST}:${SSH_PORT}"
 echo "Keep this terminal open; press Ctrl+C to close the tunnels."
@@ -40,9 +62,6 @@ exec ssh \
   -o ExitOnForwardFailure=yes \
   -o ServerAliveInterval=30 \
   -o ServerAliveCountMax=3 \
-  -L "127.0.0.1:${LOCAL_LLM_PORT}:127.0.0.1:${REMOTE_LLM_PORT}" \
-  -L "127.0.0.1:${LOCAL_VISION_PORT}:127.0.0.1:${REMOTE_VISION_PORT}" \
-  -L "127.0.0.1:${LOCAL_EMBEDDING_PORT}:127.0.0.1:${REMOTE_EMBEDDING_PORT}" \
-  -L "127.0.0.1:${LOCAL_RERANKER_PORT}:127.0.0.1:${REMOTE_RERANKER_PORT}" \
+  "${forward_args[@]}" \
   "${SSH_USER}@${SSH_HOST}"
 

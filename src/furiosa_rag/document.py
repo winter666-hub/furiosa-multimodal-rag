@@ -25,4 +25,3 @@ class PdfTextExtractor:
         if not any(page.text for page in pages):
             raise ValueError("PDF contains no extractable text; OCR is not implemented yet")
         return pages
-
