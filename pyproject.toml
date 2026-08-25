@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "furiosa-multimodal-rag"
+version = "0.1.0"
+description = "Multimodal RAG agent backed by Furiosa NPU model APIs"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["numpy>=2.0,<3.0", "pypdf>=5.0,<7.0"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "ruff>=0.6"]
+
+[project.scripts]
+furiosa-check = "furiosa_rag.cli.check_connection:main"
+furiosa-smoke-test = "furiosa_rag.cli.smoke_test:main"
+furiosa-rag = "furiosa_rag.cli.run_rag:main"
+furiosa-rag-benchmark = "furiosa_rag.cli.benchmark:main"
+
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"

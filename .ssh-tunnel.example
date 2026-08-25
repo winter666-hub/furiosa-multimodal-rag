@@ -1,0 +1,19 @@
+# Copy this file to .ssh-tunnel.env and fill in the actual values.
+# Use a Git Bash path for SSH_KEY, for example /c/Users/me/.ssh/npu.pem.
+SSH_KEY=/c/path/to/npu-server.pem
+SSH_USER=ubuntu
+SSH_HOST=npu.example.com
+SSH_PORT=22
+
+# Ports as seen from the NPU server itself.
+REMOTE_LLM_PORT=8000
+REMOTE_VISION_PORT=8001
+REMOTE_EMBEDDING_PORT=8002
+REMOTE_RERANKER_PORT=8003
+
+# Ports exposed only on this Windows PC.
+LOCAL_LLM_PORT=8000
+LOCAL_VISION_PORT=8001
+LOCAL_EMBEDDING_PORT=8002
+LOCAL_RERANKER_PORT=8003
+

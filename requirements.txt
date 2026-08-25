@@ -1,0 +1,5 @@
+# Runtime code intentionally uses only the Python standard library.
+# Test dependency:
+pytest>=8.0,<9.0
+numpy>=2.0,<3.0
+pypdf>=5.0,<7.0
