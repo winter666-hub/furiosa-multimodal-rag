@@ -6,6 +6,8 @@ import logging
 import os
 import tempfile
 import time
+import uuid
+from contextlib import asynccontextmanager
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated
@@ -24,10 +26,15 @@ from furiosa_rag.config import ModelEndpoint, Settings
 from furiosa_rag.embedding import FuriosaEmbedding
 from furiosa_rag.llm import FuriosaLlm
 from furiosa_rag.models import RagAnswer
-from furiosa_rag.pdf_images import PdfPageRenderer
-from furiosa_rag.pipeline import TextRagPipeline
+from furiosa_rag.pdf_images import PdfPageRenderer, find_text_highlights
+from furiosa_rag.pipeline import TextRagPipeline, clean_internal_citations
 from furiosa_rag.reranker import FuriosaReranker
 from furiosa_rag.router import AdaptiveQueryRouter, LLMQueryRouter, QueryRoute, QueryRouter
+from furiosa_rag.web.database import (
+    ChatLogRecord,
+    ChatLogRepository,
+    create_chat_log_repository,
+)
 from furiosa_rag.web.documents import (
     DocumentNotFoundError,
     DocumentStore,
@@ -45,6 +52,7 @@ BUSY_DETAIL = "The demo is currently busy. Please try again shortly."
 class AskRequest(BaseModel):
     question: str = Field(min_length=1, max_length=4000)
     document_id: str | None = None
+    session_id: uuid.UUID | None = None
 
     @field_validator("question")
     @classmethod
@@ -55,9 +63,23 @@ class AskRequest(BaseModel):
         return stripped
 
 
+class HighlightResponse(BaseModel):
+    x: float
+    y: float
+    width: float
+    height: float
+
+
 class SourceResponse(BaseModel):
     page: int
     chunk: str
+    chunk_id: str
+    excerpt: str
+    retrieval_score: float
+    rerank_score: float | None = None
+    page_width: float | None = None
+    page_height: float | None = None
+    highlights: list[HighlightResponse] = Field(default_factory=list)
 
 
 class AskResponse(BaseModel):
@@ -226,6 +248,15 @@ def get_ask_concurrency_limiter() -> ConcurrencyLimiter:
     return ConcurrencyLimiter(_positive_int_env("MAX_CONCURRENT_ASKS", 3))
 
 
+@lru_cache(maxsize=1)
+def get_chat_log_repository() -> ChatLogRepository | None:
+    try:
+        return create_chat_log_repository()
+    except Exception:  # noqa: BLE001 - persistence must never break the public API
+        logger.warning("Failed to configure chat log persistence")
+        return None
+
+
 def _enforce_rate_limit(request: Request, limiter: RateLimiter) -> None:
     allowed, retry_after = limiter.check(
         client_ip(request, os.getenv("PAPER_RAG_PROXY_SECRET"))
@@ -337,22 +368,56 @@ class HostedOnlyRagService:
         latency["routing"] = routing_latency
         latency["total"] = total_latency
         fallback_used = decision.route is QueryRoute.VISUAL_REQUIRED
+        source_responses: list[SourceResponse] = []
+        seen_sources: set[tuple[str | None, int, str]] = set()
+        for source in result.sources:
+            key = (document_id, source.chunk.page_number, source.chunk.chunk_id)
+            if key in seen_sources:
+                continue
+            seen_sources.add(key)
+            excerpt = source.chunk.text.strip()[:500]
+            page_width: float | None = None
+            page_height: float | None = None
+            highlights: list[HighlightResponse] = []
+            try:
+                located = find_text_highlights(pdf_path, source.chunk.page_number, excerpt)
+                page_width = located.page_width
+                page_height = located.page_height
+                highlights = [
+                    HighlightResponse(
+                        x=rectangle.x,
+                        y=rectangle.y,
+                        width=rectangle.width,
+                        height=rectangle.height,
+                    )
+                    for rectangle in located.rectangles
+                ]
+            except (FileNotFoundError, OSError, RuntimeError, ValueError):
+                pass
+            source_responses.append(
+                SourceResponse(
+                    page=source.chunk.page_number,
+                    chunk=source.chunk.chunk_id,
+                    chunk_id=source.chunk.chunk_id,
+                    excerpt=excerpt,
+                    retrieval_score=source.retrieval_score,
+                    rerank_score=source.rerank_score,
+                    page_width=page_width,
+                    page_height=page_height,
+                    highlights=highlights,
+                )
+            )
+
         return AskResponse(
             question=question,
             document_id=document_id,
-            answer=result.answer,
+            answer=clean_internal_citations(result.answer),
             route=decision.route.value,
             routing_reason=decision.reason,
             vision_used=False,
             vision_available=False,
             fallback_used=fallback_used,
-            sources=[
-                SourceResponse(
-                    page=source.chunk.page_number,
-                    chunk=source.chunk.chunk_id,
-                )
-                for source in result.sources
-            ],
+            sources=source_responses,
             latency_ms=latency,
         )
 
@@ -360,6 +425,11 @@ class HostedOnlyRagService:
         if self.pipeline_factory is None:
             raise RuntimeError("uploaded document pipeline is unavailable")
         self.pipeline_factory.prepare(document)
+
+    def filename_for(self, document_id: str | None) -> str | None:
+        if document_id is not None and self.document_store is not None:
+            return self.document_store.get(document_id).filename
+        return self.pdf_path.name if self.pdf_path is not None else None
 
 
 def _prepare_document_locked(
@@ -382,6 +452,39 @@ def _ask_locked(service: HostedOnlyRagService, request: AskRequest) -> AskRespon
         return service.ask(request.question, request.document_id)
     with service.document_store.processing(request.document_id):
         return service.ask(request.question, request.document_id)
+
+
+def _persist_chat_log(
+    repository: ChatLogRepository,
+    service: HostedOnlyRagService,
+    request: AskRequest,
+    response: AskResponse,
+) -> None:
+    session_id = request.session_id or uuid.uuid4()
+    record = ChatLogRecord.create(
+        session_id=session_id,
+        document_id=response.document_id,
+        filename=service.filename_for(response.document_id),
+        question=response.question,
+        answer=response.answer,
+        route=response.route,
+        routing_reason=response.routing_reason,
+        vision_used=response.vision_used,
+        vision_available=response.vision_available,
+        fallback_used=response.fallback_used,
+        sources=[
+            {
+                "page": source.page,
+                "chunk_id": source.chunk_id,
+                "excerpt": source.excerpt,
+                "retrieval_score": source.retrieval_score,
+                "rerank_score": source.rerank_score,
+            }
+            for source in response.sources
+        ],
+        latency_ms=dict(response.latency_ms),
+    )
+    repository.persist(record)
 
 
 @lru_cache(maxsize=1)
@@ -410,7 +513,18 @@ def get_service() -> HostedOnlyRagService:
     )
 
 
-app = FastAPI(title="Furiosa Multimodal RAG", version="0.1.0")
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    repository = get_chat_log_repository()
+    if repository is not None:
+        try:
+            await run_in_threadpool(repository.initialize)
+        except Exception:  # noqa: BLE001 - persistence is best-effort by design
+            logger.warning("Failed to initialize chat log persistence")
+    yield
+
+
+app = FastAPI(title="Furiosa Multimodal RAG", version="0.1.0", lifespan=lifespan)
 allowed_origins = parse_allowed_origins(os.getenv("ALLOWED_ORIGINS"))
 app.add_middleware(
     CORSMiddleware,
@@ -537,12 +651,19 @@ async def ask(
     _: Annotated[None, Depends(enforce_ask_rate_limit)],
     service: Annotated[HostedOnlyRagService, Depends(get_service)],
     concurrency: Annotated[ConcurrencyLimiter, Depends(get_ask_concurrency_limiter)],
+    chat_logs: Annotated[ChatLogRepository | None, Depends(get_chat_log_repository)],
 ) -> AskResponse:
     if not concurrency.acquire():
         logger.warning("Demo ask concurrency limit reached")
         raise HTTPException(status_code=503, detail=BUSY_DETAIL)
     try:
-        return await run_in_threadpool(_ask_locked, service, request)
+        response = await run_in_threadpool(_ask_locked, service, request)
+        if chat_logs is not None:
+            try:
+                await run_in_threadpool(_persist_chat_log, chat_logs, service, request, response)
+            except Exception:  # noqa: BLE001 - return the completed answer on DB failure
+                logger.warning("Failed to persist chat log")
+        return response
     except DocumentNotFoundError as exc:
         raise HTTPException(status_code=404, detail="document not found") from exc
     except FileNotFoundError as exc:

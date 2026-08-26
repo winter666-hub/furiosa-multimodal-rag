@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from pathlib import Path
 from typing import Self
 from unittest.mock import Mock, patch
@@ -16,6 +17,7 @@ from furiosa_rag.web.app import (
     HostedOnlyRagService,
     app,
     ensure_demo_pdf,
+    get_chat_log_repository,
     get_demo_pdf_path,
     get_service,
     parse_allowed_origins,
@@ -43,14 +45,15 @@ class FakeDownloadResponse:
 
 
 class FakeTextPipeline:
-    def __init__(self) -> None:
+    def __init__(self, answer: str = "answer") -> None:
         self.calls: list[tuple[Path, str]] = []
+        self.answer_text = answer
 
     def answer(self, pdf_path: Path, question: str) -> RagAnswer:
         self.calls.append((pdf_path, question))
         source = RetrievedChunk(Chunk("page-5-chunk-1", 5, "evidence"), 0.9, 0.8)
         return RagAnswer(
-            "answer",
+            self.answer_text,
             (source,),
             {"query_embedding": 2.0, "answer_generation": 4.0, "total": 6.0},
         )
@@ -86,6 +89,35 @@ def test_health_does_not_trigger_pdf_download() -> None:
         response = TestClient(app).get("/health")
     assert response.status_code == 200
     download.assert_not_called()
+
+
+def test_startup_initializes_schema_without_affecting_health() -> None:
+    repository = Mock()
+    with (
+        patch("furiosa_rag.web.app.get_chat_log_repository", return_value=repository),
+        TestClient(app) as client,
+    ):
+        response = client.get("/health")
+
+    assert response.status_code == 200
+    repository.initialize.assert_called_once_with()
+
+
+def test_startup_database_failure_is_safe_and_does_not_log_details(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    repository = Mock()
+    repository.initialize.side_effect = RuntimeError("postgres://secret:password@host/db")
+    with (
+        patch("furiosa_rag.web.app.get_chat_log_repository", return_value=repository),
+        caplog.at_level("WARNING"),
+        TestClient(app) as client,
+    ):
+        response = client.get("/health")
+
+    assert response.status_code == 200
+    assert "Failed to initialize chat log persistence" in caplog.text
+    assert "password" not in caplog.text
 
 
 def test_existing_demo_pdf_skips_download(pdf_path: Path) -> None:
@@ -163,8 +195,172 @@ def test_text_only_uses_text_pipeline(pdf_path: Path) -> None:
     assert body["vision_used"] is False
     assert body["vision_available"] is False
     assert body["fallback_used"] is False
-    assert body["sources"] == [{"page": 5, "chunk": "page-5-chunk-1"}]
+    assert len(body["sources"]) == 1
+    assert body["sources"][0]["page"] == 5
+    assert body["sources"][0]["chunk"] == "page-5-chunk-1"
+    assert body["sources"][0]["chunk_id"] == "page-5-chunk-1"
+    assert body["sources"][0]["excerpt"] == "evidence"
+    assert body["sources"][0]["retrieval_score"] == 0.9
     assert len(pipeline.calls) == 1
+
+
+def test_successful_ask_persists_approved_conversation_payload(pdf_path: Path) -> None:
+    router = Mock()
+    router.route.return_value = RoutingDecision(QueryRoute.TEXT_ONLY, "text route")
+    service = HostedOnlyRagService(
+        router,
+        FakeTextPipeline("Hello [page 5, chunk page-5-chunk-1]."),
+        pdf_path,
+    )  # type: ignore[arg-type]
+    repository = Mock()
+    session_id = uuid.uuid4()
+    app.dependency_overrides[get_service] = lambda: service
+    app.dependency_overrides[get_chat_log_repository] = lambda: repository
+
+    response = TestClient(app).post(
+        "/ask", json={"question": "question", "session_id": str(session_id)}
+    )
+
+    assert response.status_code == 200
+    repository.persist.assert_called_once()
+    record = repository.persist.call_args.args[0]
+    assert record.session_id == session_id
+    assert record.document_id is None
+    assert record.filename == "paper.pdf"
+    assert record.question == "question"
+    assert response.json()["answer"] == "Hello."
+    assert record.answer == "Hello."
+    assert record.route == "TEXT_ONLY"
+    assert record.routing_reason == "text route"
+    assert record.sources == [
+        {
+            "page": 5,
+            "chunk_id": "page-5-chunk-1",
+            "excerpt": "evidence",
+            "retrieval_score": 0.9,
+            "rerank_score": 0.8,
+        }
+    ]
+    assert record.latency_ms["answer_generation"] == 4.0
+    assert set(record.__dataclass_fields__) == {
+        "id",
+        "session_id",
+        "document_id",
+        "filename",
+        "question",
+        "answer",
+        "route",
+        "routing_reason",
+        "vision_used",
+        "vision_available",
+        "fallback_used",
+        "sources",
+        "latency_ms",
+        "created_at",
+    }
+
+
+def test_missing_session_id_gets_backend_generated_uuid(pdf_path: Path) -> None:
+    router = Mock()
+    router.route.return_value = RoutingDecision(QueryRoute.TEXT_ONLY, "text route")
+    service = HostedOnlyRagService(router, FakeTextPipeline(), pdf_path)  # type: ignore[arg-type]
+    repository = Mock()
+    app.dependency_overrides[get_service] = lambda: service
+    app.dependency_overrides[get_chat_log_repository] = lambda: repository
+
+    response = TestClient(app).post("/ask", json={"question": "question"})
+
+    assert response.status_code == 200
+    assert isinstance(repository.persist.call_args.args[0].session_id, uuid.UUID)
+
+
+def test_persistence_failure_does_not_fail_answer_or_log_details(
+    pdf_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    router = Mock()
+    router.route.return_value = RoutingDecision(QueryRoute.TEXT_ONLY, "text route")
+    service = HostedOnlyRagService(router, FakeTextPipeline(), pdf_path)  # type: ignore[arg-type]
+    repository = Mock()
+    repository.persist.side_effect = RuntimeError("postgres://secret-user:secret-pass@host/db")
+    app.dependency_overrides[get_service] = lambda: service
+    app.dependency_overrides[get_chat_log_repository] = lambda: repository
+
+    with caplog.at_level("WARNING"):
+        response = TestClient(app).post("/ask", json={"question": "question"})
+
+    assert response.status_code == 200
+    assert response.json()["answer"] == "answer"
+    assert "Failed to persist chat log" in caplog.text
+    assert "secret-pass" not in caplog.text
+
+
+def test_disabled_persistence_keeps_ask_behavior(pdf_path: Path) -> None:
+    router = Mock()
+    router.route.return_value = RoutingDecision(QueryRoute.TEXT_ONLY, "text route")
+    service = HostedOnlyRagService(router, FakeTextPipeline(), pdf_path)  # type: ignore[arg-type]
+    app.dependency_overrides[get_service] = lambda: service
+    app.dependency_overrides[get_chat_log_repository] = lambda: None
+
+    response = TestClient(app).post("/ask", json={"question": "question"})
+
+    assert response.status_code == 200
+    assert response.json()["answer"] == "answer"
+
+
+def test_sources_use_retrieved_text_and_deduplicate_exact_chunk(tmp_path: Path) -> None:
+    pdf_path = _create_test_pdf(tmp_path / "sources.pdf", pages=1)
+    first = RetrievedChunk(Chunk("page-1-chunk-1", 1, "actual retrieved first text"), 0.9, 0.8)
+    duplicate = RetrievedChunk(
+        Chunk("page-1-chunk-1", 1, "actual retrieved first text"), 0.7, 0.6
+    )
+    second = RetrievedChunk(
+        Chunk("page-1-chunk-2", 1, "actual retrieved second text"), 0.5, 0.4
+    )
+    pipeline = Mock()
+    pipeline.answer.return_value = RagAnswer("answer", (first, duplicate, second), {"total": 1.0})
+    router = Mock()
+    router.route.return_value = RoutingDecision(QueryRoute.TEXT_ONLY, "text route")
+    service = HostedOnlyRagService(router, pipeline, pdf_path)
+
+    response = service.ask("question")
+
+    assert [source.chunk_id for source in response.sources] == [
+        "page-1-chunk-1",
+        "page-1-chunk-2",
+    ]
+    assert [source.excerpt for source in response.sources] == [
+        "actual retrieved first text",
+        "actual retrieved second text",
+    ]
+
+
+def test_source_response_includes_highlight_coordinates_when_text_matches(tmp_path: Path) -> None:
+    pdf_path = tmp_path / "highlight.pdf"
+    document = pymupdf.open()
+    document.new_page().insert_text(
+        (72, 72), "BERT is designed to pre-train deep bidirectional representations."
+    )
+    document.save(pdf_path)
+    document.close()
+    source = RetrievedChunk(
+        Chunk(
+            "page-1-chunk-1",
+            1,
+            "BERT is designed to pre-train deep bidirectional representations.",
+        ),
+        0.9,
+        0.8,
+    )
+    pipeline = Mock()
+    pipeline.answer.return_value = RagAnswer("answer", (source,), {"total": 1.0})
+    router = Mock()
+    router.route.return_value = RoutingDecision(QueryRoute.TEXT_ONLY, "text route")
+
+    response = HostedOnlyRagService(router, pipeline, pdf_path).ask("question")
+
+    assert response.sources[0].page_width is not None
+    assert response.sources[0].page_height is not None
+    assert response.sources[0].highlights
 
 
 def test_hosted_only_visual_route_falls_back_without_vision_call(pdf_path: Path) -> None:

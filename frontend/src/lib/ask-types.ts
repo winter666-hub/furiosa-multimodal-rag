@@ -1,6 +1,18 @@
 export interface AskSource {
   page: number;
   chunk: string;
+  chunk_id: string;
+  excerpt: string;
+  retrieval_score: number;
+  rerank_score?: number | null;
+  page_width?: number | null;
+  page_height?: number | null;
+  highlights: Array<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }>;
 }
 
 export interface AskResponse {

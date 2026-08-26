@@ -74,7 +74,7 @@ local evaluation path, while the public demo deliberately uses hosted text fallb
 
 RAG has four roles here: **retrieval** finds relevant PDF chunks, **augmentation** gives those
 chunks to the final LLM, **generation** produces an evidence-bound answer, and **verification**
-returns chunk IDs and one-based source pages.
+returns user-facing one-based source pages with the retrieved passage kept as internal metadata.
 
 ## Furiosa Integration
 
@@ -92,7 +92,7 @@ claim to run Direct NPU Vision.
 
 - Arbitrary PDF upload, SHA-256 IDs, path-safe isolation, and duplicate cache reuse
 - Retrieval, reranking, adaptive routing, and evidence-grounded generation
-- Source-page buttons, rendered previews, and PDF replacement
+- Source-page buttons, referenced passages, responsive text highlights, and PDF replacement
 - Process-local rate/concurrency limits and bounded TTL/storage cleanup
 - Trusted Cloudflare-to-Render client-IP forwarding with a shared proxy secret
 
@@ -149,6 +149,17 @@ numbers are intentionally kept separate from the E2E latency table.
 4. Review the answer, route, and fallback indicators.
 5. Click a source `Page` button.
 6. Compare the answer with the rendered original page.
+
+## Source Verification
+
+Answers do not expose internal chunk identifiers or application citation markers. The `Sources`
+controls show only page labels; opening one displays the cited PDF page and the actual retrieved
+passage used for grounding. When PyMuPDF can locate a stable text anchor, the matching PDF-space
+rectangle is overlaid responsively on the rendered page.
+
+Text-coordinate lookup is best-effort. Scanned or image-only pages, complex multi-column layouts,
+hyphenated text, formulas, and figure-only evidence may not produce a highlight. The page preview
+and referenced excerpt remain available as the fallback, without OCR or a user-facing error.
 
 Example questions:
 
@@ -214,6 +225,13 @@ The frontend and backend must share a server-side `PAPER_RAG_PROXY_SECRET`; it i
 `FURIOSA_API_KEY` and must not enter the browser bundle. See [DEPLOY_RENDER.md](DEPLOY_RENDER.md)
 for environment variables, start commands, health checks, upload behavior, and proxy details.
 
+The Render backend can optionally persist successful conversations to PostgreSQL when
+`DATABASE_URL` is configured. The browser creates a tab-scoped anonymous session UUID, and the UI
+discloses near the question input that questions and AI responses may be stored for service
+improvement and research analysis. Persistence is disabled when `DATABASE_URL` is absent and is
+best-effort when the database is unavailable. See [DEPLOY_RENDER.md](DEPLOY_RENDER.md) for the
+stored-field boundary and setup details.
+
 The public demo includes process-local IP rate limits, upload/ask concurrency caps, a 25 MB PDF
 limit, `MAX_DOCUMENTS`, `DOCUMENT_TTL_HOURS`, and `MAX_DOCUMENT_STORAGE_MB`. Cloudflare forwards
 its verified client address to Render only with the shared proxy token; untrusted forwarded-IP
@@ -231,10 +249,13 @@ production-grade security layer.
 - The UI maintains one active document session at a time.
 - The current benchmark is small and based on one paper-oriented evaluation set.
 - Implicit visual questions remain the hardest routing cases.
+- Conversation-log retention and deletion are not automated yet; a formal retention policy is
+  required before long-term research use.
 
 ## Future Work
 
-- Durable storage and distributed rate limiting
+- A defined conversation-log retention/deletion policy and operator access controls
+- Durable document storage and distributed rate limiting
 - A public Direct-NPU visual path and better implicit-visual routing
 - Larger multi-domain benchmarks, multi-document RAG, and asynchronous indexing
 

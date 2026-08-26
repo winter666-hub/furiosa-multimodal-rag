@@ -2,11 +2,12 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowUp, BookOpenText, FileSearch } from "lucide-react";
 import { askPaperQuestion, getBackendHealth } from "@/lib/ask.functions";
-import type { CurrentDocument } from "@/lib/ask-types";
+import type { AskSource, CurrentDocument } from "@/lib/ask-types";
 import { ChatEntryView, type ChatEntry } from "@/components/chat/chat-message";
 import { TypingIndicator } from "@/components/chat/typing-indicator";
 import { PageViewer } from "@/components/chat/page-viewer";
 import { DocumentUpload } from "@/components/document-upload";
+import { getSessionId } from "@/lib/session";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -37,7 +38,13 @@ const SUGGESTED_QUESTIONS = [
 ];
 
 type BackendStatus = "connecting" | "online" | "offline";
-type ViewerState = { documentId: string; filename: string; page: number; totalPages: number };
+type ViewerState = {
+  documentId: string;
+  filename: string;
+  page: number;
+  totalPages: number;
+  source?: AskSource;
+};
 
 function DemoPage() {
   const [document, setDocument] = useState<CurrentDocument | null>(null);
@@ -65,13 +72,23 @@ function DemoPage() {
 
   const closeViewer = useCallback(() => setViewer(null), []);
   const navigateViewer = useCallback((page: number) => {
-    setViewer((current) => (current ? { ...current, page } : null));
+    setViewer((current) =>
+      current
+        ? { ...current, page, source: current.source?.page === page ? current.source : undefined }
+        : null,
+    );
   }, []);
   const openViewer = useCallback(
-    (page: number, documentId: string) => {
+    (source: AskSource, documentId: string) => {
       const current = document;
       if (!current || current.documentId !== documentId) return;
-      setViewer({ documentId, filename: current.filename, page, totalPages: current.pages });
+      setViewer({
+        documentId,
+        filename: current.filename,
+        page: source.page,
+        totalPages: current.pages,
+        source,
+      });
     },
     [document],
   );
@@ -88,7 +105,11 @@ function DemoPage() {
       { id: crypto.randomUUID(), role: "user", text: question },
     ]);
     const result = await askPaperQuestion({
-      data: { question, documentId: currentDocument.documentId },
+      data: {
+        question,
+        documentId: currentDocument.documentId,
+        sessionId: getSessionId(),
+      },
     });
     setEntries((previous) => [
       ...previous,
@@ -135,7 +156,14 @@ function DemoPage() {
             {document && (
               <button
                 type="button"
-                onClick={() => openViewer(1, document.documentId)}
+                onClick={() =>
+                  setViewer({
+                    documentId: document.documentId,
+                    filename: document.filename,
+                    page: 1,
+                    totalPages: document.pages,
+                  })
+                }
                 title="문서 첫 페이지 보기"
                 className="flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
               >
@@ -214,6 +242,10 @@ function DemoPage() {
           </div>
           <p className="mt-2 text-center text-[11px] text-muted-foreground">
             응답은 업로드한 PDF만 근거로 생성되며, 콜드 스타트 시 최대 1분 이상 걸릴 수 있습니다.
+          </p>
+          <p className="mt-1 text-center text-[11px] text-muted-foreground">
+            Questions and AI responses may be stored for service improvement and research analysis.
+            Do not submit sensitive or personal information.
           </p>
         </form>
       </footer>

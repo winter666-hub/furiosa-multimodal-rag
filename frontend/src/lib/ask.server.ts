@@ -11,7 +11,11 @@ const HEALTH_API_URL = `${BACKEND_BASE_URL}/health`;
 const REQUEST_TIMEOUT_MS = 180_000;
 const HEALTH_TIMEOUT_MS = 120_000;
 
-export async function askBackend(question: string, documentId: string): Promise<AskResult> {
+export async function askBackend(
+  question: string,
+  documentId: string,
+  sessionId: string,
+): Promise<AskResult> {
   try {
     const res = await fetch(ASK_API_URL, {
       method: "POST",
@@ -19,7 +23,7 @@ export async function askBackend(question: string, documentId: string): Promise<
         "Content-Type": "application/json",
         ...paperRagProxyHeaders(getRequestHeaders()),
       },
-      body: JSON.stringify({ question, document_id: documentId }),
+      body: JSON.stringify({ question, document_id: documentId, session_id: sessionId }),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
 

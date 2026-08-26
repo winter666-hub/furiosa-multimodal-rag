@@ -1,5 +1,5 @@
 import { AlertCircle, Info, RotateCcw } from "lucide-react";
-import type { AskResponse } from "@/lib/ask-types";
+import type { AskResponse, AskSource } from "@/lib/ask-types";
 import { AnswerMarkdown } from "./answer-markdown";
 
 export type ChatEntry =
@@ -45,9 +45,14 @@ function AnswerMetadata({
   onViewPage,
 }: {
   data: AskResponse;
-  onViewPage: (page: number, documentId: string) => void;
+  onViewPage: (source: AskSource, documentId: string) => void;
 }) {
-  const pages = Array.from(new Set(data.sources.map((s) => s.page)));
+  const sources = data.sources.filter(
+    (source, index, all) =>
+      all.findIndex(
+        (candidate) => candidate.page === source.page && candidate.chunk_id === source.chunk_id,
+      ) === index,
+  );
   const latencySec = (data.latency_ms.total / 1000).toFixed(1);
 
   return (
@@ -68,18 +73,18 @@ function AnswerMetadata({
         <span className="font-medium text-foreground/70">Latency</span>{" "}
         <span className="font-mono">{latencySec}s</span>
       </span>
-      {pages.length > 0 && (
+      {sources.length > 0 && (
         <span className="flex flex-wrap items-center gap-1.5">
           <span className="font-medium text-foreground/70">Sources</span>
-          {pages.map((p) => (
+          {sources.map((source) => (
             <button
-              key={p}
+              key={`${source.page}-${source.chunk_id}`}
               type="button"
-              onClick={() => data.document_id && onViewPage(p, data.document_id)}
+              onClick={() => data.document_id && onViewPage(source, data.document_id)}
               disabled={!data.document_id}
               className="rounded-md border border-border bg-card px-1.5 py-0.5 font-mono text-[11px] text-foreground/80 transition-colors hover:border-ring/50 hover:bg-accent hover:text-foreground"
             >
-              Page {p}
+              Page {source.page}
             </button>
           ))}
         </span>
@@ -93,7 +98,7 @@ function AssistantMessage({
   onViewPage,
 }: {
   data: AskResponse;
-  onViewPage: (page: number, documentId: string) => void;
+  onViewPage: (source: AskSource, documentId: string) => void;
 }) {
   const visualFallback =
     data.route === "VISUAL_REQUIRED" && !data.vision_used && data.fallback_used;
@@ -169,7 +174,7 @@ export function ChatEntryView({
 }: {
   entry: ChatEntry;
   onRetry: (question: string) => void;
-  onViewPage: (page: number, documentId: string) => void;
+  onViewPage: (source: AskSource, documentId: string) => void;
   onDocumentLost: () => void;
 }) {
   if (entry.role === "user") {

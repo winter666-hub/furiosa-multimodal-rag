@@ -94,6 +94,7 @@ DEMO_PDF_PATH=/path/to/attention_is_all_you_need.pdf
 DEMO_PDF_URL=https://public.example/attention_is_all_you_need.pdf
 MAX_PDF_UPLOAD_MB=25
 DOCUMENT_STORAGE_ROOT=/tmp/furiosa-rag/documents
+DATABASE_URL=<Render PostgreSQL internal URL; omit to disable logging>
 PAPER_RAG_PROXY_SECRET=<long-random-proxy-secret>
 UPLOAD_RATE_LIMIT_REQUESTS=3
 UPLOAD_RATE_LIMIT_WINDOW_SECONDS=600
@@ -176,3 +177,27 @@ Configure the Cloudflare Worker secrets separately from public build variables:
 PAPER_RAG_PROXY_SECRET=<the same value configured on Render>
 MAX_UPLOAD_PROXY_MB=27
 ```
+
+## Optional PostgreSQL Conversation Logging
+
+Attach a Render PostgreSQL database to the backend and set its internal connection URL as:
+
+```text
+DATABASE_URL=<Render PostgreSQL internal URL>
+```
+
+When `DATABASE_URL` is present, backend startup creates the `chat_logs` table and its
+`session_id`, `created_at`, and `document_id` indexes if they do not already exist. `/health`
+does not initialize the database. When the variable is absent, logging is disabled and the app
+continues to operate normally. A database initialization or insert failure is also best-effort:
+the answer still succeeds and logs contain only a fixed warning without connection details.
+
+Only the question, generated answer, routing/fallback metadata, source references, timing data,
+document ID/filename, and a browser-tab session UUID are stored. API keys, proxy secrets, client
+IP addresses, request headers/cookies, PDFs, full extracted document text, and embeddings are not
+stored in this table. `DATABASE_URL` belongs only on Render; do not configure it as a Cloudflare
+Worker variable or expose it to browser code.
+
+This initial implementation does not include a history API, admin UI, or automatic retention
+cleanup. Define and implement a retention/deletion policy before treating the log as a long-term
+dataset, and restrict database access to authorized operators.

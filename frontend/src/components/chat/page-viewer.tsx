@@ -8,12 +8,14 @@ import {
   Upload,
   X,
 } from "lucide-react";
+import type { AskSource } from "@/lib/ask-types";
 
 export function PageViewer({
   documentId,
   filename,
   page,
   totalPages,
+  source,
   onNavigate,
   onClose,
   onDocumentLost,
@@ -22,6 +24,7 @@ export function PageViewer({
   filename: string;
   page: number;
   totalPages: number;
+  source?: AskSource;
   onNavigate: (page: number) => void;
   onClose: () => void;
   onDocumentLost: () => void;
@@ -65,7 +68,7 @@ export function PageViewer({
           <div className="min-w-0">
             <p className="truncate text-xs text-muted-foreground">{filename}</p>
             <p className="font-mono text-xs">
-              Page {page} / {totalPages}
+              {source ? "Source · " : ""}Page {page} / {totalPages}
             </p>
           </div>
           <div className="flex items-center gap-1">
@@ -120,16 +123,41 @@ export function PageViewer({
               </div>
             </div>
           ) : (
-            <img
-              key={`${documentId}-${page}-${attempt}`}
-              src={`${imageUrl}?attempt=${attempt}`}
-              alt={`${filename}의 ${page}페이지`}
-              onLoad={() => setStatus("ready")}
-              onError={() => setStatus("error")}
-              className={`max-h-[72dvh] w-auto max-w-full rounded-sm border border-border bg-card shadow-md transition-opacity ${status === "ready" ? "opacity-100" : "opacity-0"}`}
-            />
+            <div className="relative inline-block max-w-full">
+              <img
+                key={`${documentId}-${page}-${attempt}`}
+                src={`${imageUrl}?attempt=${attempt}`}
+                alt={`${filename}의 ${page}페이지`}
+                onLoad={() => setStatus("ready")}
+                onError={() => setStatus("error")}
+                className={`block max-h-[66dvh] w-auto max-w-full rounded-sm border border-border bg-card shadow-md transition-opacity ${status === "ready" ? "opacity-100" : "opacity-0"}`}
+              />
+              {status === "ready" && source?.page_width && source.page_height
+                ? source.highlights.map((highlight, index) => (
+                    <span
+                      key={`${highlight.x}-${highlight.y}-${index}`}
+                      aria-hidden="true"
+                      className="pointer-events-none absolute rounded-sm border border-highlight-foreground/40 bg-highlight/45"
+                      style={{
+                        left: `${(highlight.x / source.page_width) * 100}%`,
+                        top: `${(highlight.y / source.page_height) * 100}%`,
+                        width: `${(highlight.width / source.page_width) * 100}%`,
+                        height: `${(highlight.height / source.page_height) * 100}%`,
+                      }}
+                    />
+                  ))
+                : null}
+            </div>
           )}
         </div>
+        {source?.excerpt && (
+          <section className="border-t border-border bg-card px-4 py-3">
+            <h2 className="text-xs font-semibold text-foreground">Referenced passage</h2>
+            <blockquote className="mt-1.5 max-h-28 overflow-y-auto border-l-2 border-highlight-foreground/40 pl-3 text-xs leading-5 text-muted-foreground">
+              “{source.excerpt}”
+            </blockquote>
+          </section>
+        )}
         <footer className="flex items-center justify-between border-t border-border px-3 py-2">
           <button
             type="button"
