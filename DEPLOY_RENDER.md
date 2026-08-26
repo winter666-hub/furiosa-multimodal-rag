@@ -28,6 +28,18 @@ uvicorn furiosa_rag.web.app:app --host 0.0.0.0 --port $PORT
 
 `/health` performs no model initialization, PDF access, or Furiosa API request.
 
+## Source Page Preview
+
+The frontend can render any one-based `sources[].page` from `/ask` through:
+
+```text
+GET /document/page/{page_number}
+```
+
+For example, source page `5` maps directly to `/document/page/5`. The response
+is an in-memory PNG (`image/png`) rendered at 120 DPI. Up to eight rendered pages
+are held in a bounded process-local LRU cache; no PNG files are written to disk.
+
 ## Required Environment Variables
 
 ```text

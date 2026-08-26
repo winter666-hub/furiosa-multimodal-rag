@@ -12,7 +12,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import urlopen
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -22,6 +22,7 @@ from furiosa_rag.config import ModelEndpoint, Settings
 from furiosa_rag.embedding import FuriosaEmbedding
 from furiosa_rag.llm import FuriosaLlm
 from furiosa_rag.models import RagAnswer
+from furiosa_rag.pdf_images import PdfPageRenderer
 from furiosa_rag.pipeline import TextRagPipeline
 from furiosa_rag.reranker import FuriosaReranker
 from furiosa_rag.router import AdaptiveQueryRouter, LLMQueryRouter, QueryRoute, QueryRouter
@@ -117,6 +118,22 @@ def ensure_demo_pdf(
         return None
 
 
+@lru_cache(maxsize=1)
+def get_demo_pdf_path() -> Path | None:
+    settings = Settings.from_env()
+    return ensure_demo_pdf(
+        os.getenv("DEMO_PDF_PATH", ""),
+        os.getenv("DEMO_PDF_URL"),
+        timeout=settings.request_timeout,
+    )
+
+
+@lru_cache(maxsize=8)
+def render_page_png(pdf_path: str, page_number: int) -> bytes:
+    """Render and cache up to eight one-based source pages in memory."""
+    return PdfPageRenderer(dpi=120.0).render_png(pdf_path, page_number)
+
+
 class HostedOnlyRagService:
     """Apply deployment policy without changing research routers or pipelines."""
 
@@ -175,11 +192,7 @@ def get_service() -> HostedOnlyRagService:
     if mode != "hosted_only":
         raise RuntimeError(f"unsupported deployment mode: {mode}")
     settings = Settings.from_env()
-    pdf_path = ensure_demo_pdf(
-        os.getenv("DEMO_PDF_PATH", ""),
-        os.getenv("DEMO_PDF_URL"),
-        timeout=settings.request_timeout,
-    )
+    pdf_path = get_demo_pdf_path()
     client = FuriosaClient(settings.api_key, settings.request_timeout)
     llm = FuriosaLlm(_endpoint(settings, "llm"), client)
     router = AdaptiveQueryRouter(LLMQueryRouter(_endpoint(settings, "llm"), client))
@@ -205,6 +218,30 @@ app.add_middleware(
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/document/page/{page_number}", response_class=Response)
+async def document_page(
+    page_number: int,
+    pdf_path: Annotated[Path | None, Depends(get_demo_pdf_path)],
+) -> Response:
+    if page_number <= 0:
+        raise HTTPException(status_code=422, detail="page_number must be greater than zero")
+    if pdf_path is None or not pdf_path.is_file():
+        raise HTTPException(status_code=503, detail="demo document unavailable")
+    try:
+        content = await run_in_threadpool(render_page_png, str(pdf_path), page_number)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=503, detail="demo document unavailable") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="document page not found") from exc
+    except (OSError, RuntimeError) as exc:
+        raise HTTPException(status_code=500, detail="page preview unavailable") from exc
+    return Response(
+        content=content,
+        media_type="image/png",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
 
 
 @app.post("/ask", response_model=AskResponse)

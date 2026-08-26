@@ -5,6 +5,7 @@ from typing import Self
 from unittest.mock import Mock, patch
 from urllib.error import URLError
 
+import pymupdf
 import pytest
 from fastapi.testclient import TestClient
 
@@ -15,8 +16,10 @@ from furiosa_rag.web.app import (
     HostedOnlyRagService,
     app,
     ensure_demo_pdf,
+    get_demo_pdf_path,
     get_service,
     parse_allowed_origins,
+    render_page_png,
 )
 
 
@@ -63,8 +66,12 @@ def pdf_path(tmp_path: Path) -> Path:
 @pytest.fixture(autouse=True)
 def clear_overrides() -> None:
     app.dependency_overrides.clear()
+    get_demo_pdf_path.cache_clear()
+    render_page_png.cache_clear()
     yield
     app.dependency_overrides.clear()
+    get_demo_pdf_path.cache_clear()
+    render_page_png.cache_clear()
 
 
 def test_health_is_immediate_and_does_not_resolve_service() -> None:
@@ -208,3 +215,65 @@ def test_parse_allowed_origins_is_trimmed_deduplicated_and_safe() -> None:
     assert parse_allowed_origins(
         " https://demo.example, http://localhost:5173,https://demo.example "
     ) == ["https://demo.example", "http://localhost:5173"]
+
+
+def _create_test_pdf(path: Path, pages: int = 2) -> Path:
+    document = pymupdf.open()
+    for index in range(1, pages + 1):
+        document.new_page().insert_text((72, 72), f"page {index}")
+    document.save(path)
+    document.close()
+    return path
+
+
+def test_document_page_returns_png_for_valid_one_based_page(tmp_path: Path) -> None:
+    document = _create_test_pdf(tmp_path / "pages.pdf")
+    app.dependency_overrides[get_demo_pdf_path] = lambda: document
+
+    response = TestClient(app).get("/document/page/2")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/png"
+    assert response.content.startswith(b"\x89PNG\r\n\x1a\n")
+
+
+def test_document_page_zero_is_rejected(pdf_path: Path) -> None:
+    app.dependency_overrides[get_demo_pdf_path] = lambda: pdf_path
+    response = TestClient(app).get("/document/page/0")
+    assert response.status_code == 422
+
+
+def test_document_page_above_total_pages_returns_404(tmp_path: Path) -> None:
+    document = _create_test_pdf(tmp_path / "one-page.pdf", pages=1)
+    app.dependency_overrides[get_demo_pdf_path] = lambda: document
+    response = TestClient(app).get("/document/page/2")
+    assert response.status_code == 404
+    assert response.json() == {"detail": "document page not found"}
+
+
+def test_document_page_missing_pdf_returns_existing_unavailable_error() -> None:
+    app.dependency_overrides[get_demo_pdf_path] = lambda: None
+    response = TestClient(app).get("/document/page/1")
+    assert response.status_code == 503
+    assert response.json() == {"detail": "demo document unavailable"}
+
+
+def test_source_page_number_is_passed_unchanged_to_preview_endpoint(pdf_path: Path) -> None:
+    router = Mock()
+    router.route.return_value = RoutingDecision(QueryRoute.TEXT_ONLY, "text route")
+    service = HostedOnlyRagService(
+        router,
+        FakeTextPipeline(),
+        pdf_path,
+    )  # type: ignore[arg-type]
+    app.dependency_overrides[get_service] = lambda: service
+    app.dependency_overrides[get_demo_pdf_path] = lambda: pdf_path
+
+    ask_response = TestClient(app).post("/ask", json={"question": "question"})
+    source_page = ask_response.json()["sources"][0]["page"]
+    with patch("furiosa_rag.web.app.render_page_png", return_value=b"\x89PNG") as render:
+        preview_response = TestClient(app).get(f"/document/page/{source_page}")
+
+    assert source_page == 5
+    assert preview_response.status_code == 200
+    render.assert_called_once_with(str(pdf_path), 5)
