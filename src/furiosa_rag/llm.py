@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Protocol
 
 from furiosa_rag.clients import FuriosaApiError, FuriosaClient
 from furiosa_rag.config import ModelEndpoint
+
+logger = logging.getLogger(__name__)
 
 
 class LlmBackend(Protocol):
@@ -35,9 +38,16 @@ class FuriosaLlm:
             },
         )
         try:
-            content = payload["choices"][0]["message"]["content"]
+            choice = payload["choices"][0]
+            content = choice["message"]["content"]
         except (KeyError, IndexError, TypeError) as exc:
             raise FuriosaApiError("LLM response is missing choices[0].message.content") from exc
         if not isinstance(content, str):
             raise FuriosaApiError("LLM response content is not a string")
+        if choice.get("finish_reason") == "length":
+            logger.warning(
+                "LLM answer generation reached max_tokens (model=%s, max_tokens=%d)",
+                self.endpoint.model,
+                max_tokens,
+            )
         return content

@@ -20,6 +20,31 @@ def test_llm_calls_chat_completions() -> None:
     assert client.post_json.call_args.args[1] == "chat/completions"
 
 
+def test_llm_preserves_length_limited_answer_and_logs_safe_diagnostic(caplog) -> None:
+    client = Mock()
+    truncated_answer = "SQuAD v2.0 test F1 was 83.1, which is 5."
+    client.post_json.return_value = {
+        "choices": [
+            {
+                "message": {"content": truncated_answer},
+                "finish_reason": "length",
+            }
+        ]
+    }
+    backend = FuriosaLlm(ModelEndpoint("llm", "http://llm/v1", "qwen"), client)
+
+    with caplog.at_level("WARNING", logger="furiosa_rag.llm"):
+        result = backend.generate("private question", max_tokens=768)
+
+    assert result == truncated_answer
+    payload = client.post_json.call_args.args[2]
+    assert payload["max_tokens"] == 768
+    assert "reached max_tokens" in caplog.text
+    assert "max_tokens=768" in caplog.text
+    assert "private question" not in caplog.text
+    assert truncated_answer not in caplog.text
+
+
 def test_embedding_preserves_input_order() -> None:
     client = Mock()
     client.post_json.return_value = {
