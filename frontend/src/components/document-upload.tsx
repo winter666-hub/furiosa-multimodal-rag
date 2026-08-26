@@ -58,10 +58,19 @@ export function DocumentUpload({
       const payload = (await response.json().catch(() => null)) as
         UploadPayload | { detail?: string } | null;
       if (!response.ok || !payload || !("document_id" in payload)) {
+        const friendlyMessage =
+          response.status === 413
+            ? "This PDF is too large to upload. Maximum size is 25 MB."
+            : response.status === 429
+              ? "Too many requests. Please wait a few minutes and try again."
+              : response.status === 503
+                ? "The demo is currently busy. Please try again shortly."
+                : null;
         throw new Error(
-          payload && "detail" in payload && payload.detail
-            ? payload.detail
-            : "PDF 업로드에 실패했습니다.",
+          friendlyMessage ??
+            (payload && "detail" in payload && payload.detail
+              ? payload.detail
+              : "PDF upload failed."),
         );
       }
       onUploaded({

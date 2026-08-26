@@ -3,7 +3,7 @@ import { z } from "zod";
 import { askBackend, checkBackendHealth } from "./ask.server";
 
 export const askPaperQuestion = createServerFn({ method: "POST" })
-  .inputValidator((data) =>
+  .validator((data) =>
     z
       .object({
         question: z.string().trim().min(1).max(2000),

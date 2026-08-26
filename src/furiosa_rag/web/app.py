@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import tempfile
 import time
@@ -12,7 +13,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import urlopen
 
-from fastapi import Depends, FastAPI, File, HTTPException, Response, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Request, Response, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -34,6 +35,11 @@ from furiosa_rag.web.documents import (
     DocumentValidationError,
     RegisteredDocument,
 )
+from furiosa_rag.web.limits import ConcurrencyLimiter, RateLimiter, client_ip
+
+logger = logging.getLogger(__name__)
+RATE_LIMIT_DETAIL = "Too many requests. Please try again later."
+BUSY_DETAIL = "The demo is currently busy. Please try again shortly."
 
 
 class AskRequest(BaseModel):
@@ -162,10 +168,89 @@ def _max_upload_bytes() -> int:
     return megabytes * 1024 * 1024
 
 
+def _positive_int_env(name: str, default: int) -> int:
+    try:
+        value = int(os.getenv(name, str(default)))
+    except ValueError as exc:
+        raise RuntimeError(f"{name} must be an integer") from exc
+    if value <= 0:
+        raise RuntimeError(f"{name} must be greater than zero")
+    return value
+
+
+def _positive_float_env(name: str, default: float) -> float:
+    try:
+        value = float(os.getenv(name, str(default)))
+    except ValueError as exc:
+        raise RuntimeError(f"{name} must be a number") from exc
+    if value <= 0:
+        raise RuntimeError(f"{name} must be greater than zero")
+    return value
+
+
 @lru_cache(maxsize=1)
 def get_document_store() -> DocumentStore:
     root = os.getenv("DOCUMENT_STORAGE_ROOT", "/tmp/furiosa-rag/documents")
-    return DocumentStore(root, max_upload_bytes=_max_upload_bytes())
+    return DocumentStore(
+        root,
+        max_upload_bytes=_max_upload_bytes(),
+        max_documents=_positive_int_env("MAX_DOCUMENTS", 20),
+        document_ttl_hours=_positive_float_env("DOCUMENT_TTL_HOURS", 6),
+        max_storage_bytes=_positive_int_env("MAX_DOCUMENT_STORAGE_MB", 500) * 1024 * 1024,
+    )
+
+
+@lru_cache(maxsize=1)
+def get_upload_rate_limiter() -> RateLimiter:
+    return RateLimiter(
+        _positive_int_env("UPLOAD_RATE_LIMIT_REQUESTS", 3),
+        _positive_int_env("UPLOAD_RATE_LIMIT_WINDOW_SECONDS", 600),
+    )
+
+
+@lru_cache(maxsize=1)
+def get_ask_rate_limiter() -> RateLimiter:
+    return RateLimiter(
+        _positive_int_env("ASK_RATE_LIMIT_REQUESTS", 20),
+        _positive_int_env("ASK_RATE_LIMIT_WINDOW_SECONDS", 600),
+    )
+
+
+@lru_cache(maxsize=1)
+def get_upload_concurrency_limiter() -> ConcurrencyLimiter:
+    return ConcurrencyLimiter(_positive_int_env("MAX_CONCURRENT_UPLOADS", 1))
+
+
+@lru_cache(maxsize=1)
+def get_ask_concurrency_limiter() -> ConcurrencyLimiter:
+    return ConcurrencyLimiter(_positive_int_env("MAX_CONCURRENT_ASKS", 3))
+
+
+def _enforce_rate_limit(request: Request, limiter: RateLimiter) -> None:
+    allowed, retry_after = limiter.check(
+        client_ip(request, os.getenv("PAPER_RAG_PROXY_SECRET"))
+    )
+    if not allowed:
+        logger.warning("Demo API rate limit exceeded")
+        raise HTTPException(
+            status_code=429,
+            detail=RATE_LIMIT_DETAIL,
+            headers={"Retry-After": str(retry_after)},
+        )
+
+
+def enforce_upload_rate_limit(
+    request: Request,
+    limiter: Annotated[RateLimiter, Depends(get_upload_rate_limiter)],
+) -> None:
+    _enforce_rate_limit(request, limiter)
+
+
+def enforce_ask_rate_limit(
+    request: Request,
+    limiter: Annotated[RateLimiter, Depends(get_ask_rate_limiter)],
+) -> None:
+    _enforce_rate_limit(request, limiter)
 
 
 class DocumentPipelineFactory:
@@ -221,7 +306,7 @@ class HostedOnlyRagService:
         if document_id is not None:
             if self.document_store is None or self.pipeline_factory is None:
                 raise DocumentNotFoundError("document not found")
-            record = self.document_store.get(document_id)
+            record = self.document_store.get(document_id, touch=True)
             active_document = RegisteredDocument(
                 record,
                 self.document_store.pdf_path(document_id),
@@ -277,6 +362,28 @@ class HostedOnlyRagService:
         self.pipeline_factory.prepare(document)
 
 
+def _prepare_document_locked(
+    service: HostedOnlyRagService, document: RegisteredDocument
+) -> RegisteredDocument:
+    assert service.document_store is not None
+    with service.document_store.processing(document.record.document_id):
+        current = RegisteredDocument(
+            document.record,
+            document.pdf_path,
+            document.cache_dir,
+            any(document.cache_dir.glob("*.npz")),
+        )
+        service.prepare_document(current)
+        return current
+
+
+def _ask_locked(service: HostedOnlyRagService, request: AskRequest) -> AskResponse:
+    if request.document_id is None or service.document_store is None:
+        return service.ask(request.question, request.document_id)
+    with service.document_store.processing(request.document_id):
+        return service.ask(request.question, request.document_id)
+
+
 @lru_cache(maxsize=1)
 def get_service() -> HostedOnlyRagService:
     mode = os.getenv("DEPLOYMENT_MODE", "hosted_only").strip().casefold()
@@ -322,13 +429,18 @@ def health() -> dict[str, str]:
 @app.post("/documents", response_model=DocumentResponse)
 async def upload_document(
     file: Annotated[UploadFile, File()],
+    _: Annotated[None, Depends(enforce_upload_rate_limit)],
     service: Annotated[HostedOnlyRagService, Depends(get_service)],
+    concurrency: Annotated[ConcurrencyLimiter, Depends(get_upload_concurrency_limiter)],
 ) -> DocumentResponse:
     if service.document_store is None:
         raise HTTPException(status_code=503, detail="document storage unavailable")
+    if not concurrency.acquire():
+        logger.warning("Demo upload concurrency limit reached")
+        raise HTTPException(status_code=503, detail=BUSY_DETAIL)
     try:
         document = await service.document_store.register(file)
-        await run_in_threadpool(service.prepare_document, document)
+        current = await run_in_threadpool(_prepare_document_locked, service, document)
     except DocumentTooLargeError as exc:
         raise HTTPException(status_code=413, detail="PDF upload is too large") from exc
     except DocumentValidationError as exc:
@@ -337,12 +449,14 @@ async def upload_document(
         raise HTTPException(status_code=502, detail="upstream model service unavailable") from exc
     except (OSError, RuntimeError, ValueError) as exc:
         raise HTTPException(status_code=500, detail="document processing failed") from exc
+    finally:
+        concurrency.release()
     return DocumentResponse(
         document_id=document.record.document_id,
         filename=document.record.filename,
         pages=document.record.pages,
         status=document.record.status,
-        cache_hit=document.cache_hit,
+        cache_hit=current.cache_hit,
     )
 
 
@@ -420,10 +534,15 @@ async def document_page(
 @app.post("/ask", response_model=AskResponse, response_model_exclude_none=True)
 async def ask(
     request: AskRequest,
+    _: Annotated[None, Depends(enforce_ask_rate_limit)],
     service: Annotated[HostedOnlyRagService, Depends(get_service)],
+    concurrency: Annotated[ConcurrencyLimiter, Depends(get_ask_concurrency_limiter)],
 ) -> AskResponse:
+    if not concurrency.acquire():
+        logger.warning("Demo ask concurrency limit reached")
+        raise HTTPException(status_code=503, detail=BUSY_DETAIL)
     try:
-        return await run_in_threadpool(service.ask, request.question, request.document_id)
+        return await run_in_threadpool(_ask_locked, service, request)
     except DocumentNotFoundError as exc:
         raise HTTPException(status_code=404, detail="document not found") from exc
     except FileNotFoundError as exc:
@@ -434,3 +553,5 @@ async def ask(
         raise HTTPException(status_code=502, detail="upstream service unavailable") from exc
     except (RuntimeError, ValueError) as exc:
         raise HTTPException(status_code=500, detail="request processing failed") from exc
+    finally:
+        concurrency.release()

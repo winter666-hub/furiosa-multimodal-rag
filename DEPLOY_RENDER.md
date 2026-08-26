@@ -94,7 +94,37 @@ DEMO_PDF_PATH=/path/to/attention_is_all_you_need.pdf
 DEMO_PDF_URL=https://public.example/attention_is_all_you_need.pdf
 MAX_PDF_UPLOAD_MB=25
 DOCUMENT_STORAGE_ROOT=/tmp/furiosa-rag/documents
+PAPER_RAG_PROXY_SECRET=<long-random-proxy-secret>
+UPLOAD_RATE_LIMIT_REQUESTS=3
+UPLOAD_RATE_LIMIT_WINDOW_SECONDS=600
+ASK_RATE_LIMIT_REQUESTS=20
+ASK_RATE_LIMIT_WINDOW_SECONDS=600
+MAX_CONCURRENT_UPLOADS=1
+MAX_CONCURRENT_ASKS=3
+MAX_DOCUMENTS=20
+DOCUMENT_TTL_HOURS=6
+MAX_DOCUMENT_STORAGE_MB=500
 ```
+
+Set the exact same `PAPER_RAG_PROXY_SECRET` as a server-side secret in both the
+Cloudflare Worker frontend and the Render backend. It is separate from
+`FURIOSA_API_KEY` and must never be exposed to browser code. The Worker reads
+Cloudflare's `CF-Connecting-IP` and sends it to Render using internal headers;
+Render accepts that address only when the accompanying proxy token matches with
+a constant-time comparison. Direct Render requests and requests with missing or
+invalid tokens are limited by Render's immediate peer address. Ordinary
+`X-Forwarded-For` and `X-Real-IP` values are not trusted for limiter identity.
+
+The upload and ask limits are process-local controls for the single Render
+instance used by this demo. A rate-limited request returns HTTP 429 with a
+`Retry-After` header. Requests above the concurrency caps fail immediately with
+HTTP 503 instead of entering an unbounded queue.
+
+Before accepting a new PDF, the document store removes expired directories and
+then evicts the least-recently-accessed documents until the count and storage
+caps have room. Documents currently being uploaded, indexed, or queried are
+protected from cleanup. Existing metadata without access timestamps remains
+readable and falls back to its directory modification time.
 
 `DEPLOYMENT_MODE` defaults to `hosted_only`. In this mode the web service never
 constructs or calls the Direct NPU Vision backend. A `VISUAL_REQUIRED` route is
@@ -128,6 +158,21 @@ production default.
 - Uploaded PDFs and their per-document caches disappear after restart/redeploy.
 - Use the same cache conditions when comparing benchmark strategies.
 
-The initial version does not use persistent object storage or a database and
-does not run automatic TTL cleanup. Before higher-volume use, add bounded
-`MAX_DOCUMENTS`/`DOCUMENT_TTL_HOURS` cleanup or external durable storage.
+The limiter, concurrency counters, active-document tracking, and lock map are
+process-local. They assume one Render instance and reset on restart. A
+multi-instance production deployment must enforce limits in shared
+infrastructure such as Cloudflare Rate Limiting, Durable Objects, Redis, or
+another external store. The local filesystem is still ephemeral.
+
+The Cloudflare frontend upload proxy accepts `MAX_UPLOAD_PROXY_MB` (default 27)
+as a fast `Content-Length` limit and forwards the raw multipart stream. It does
+not buffer the body with `request.formData()`. Requests without a
+`Content-Length` header rely on the backend's streaming 25 MB hard limit; the
+proxy intentionally does not buffer such requests merely to measure them.
+
+Configure the Cloudflare Worker secrets separately from public build variables:
+
+```text
+PAPER_RAG_PROXY_SECRET=<the same value configured on Render>
+MAX_UPLOAD_PROXY_MB=27
+```

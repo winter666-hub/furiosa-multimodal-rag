@@ -1,4 +1,6 @@
+import { getRequestHeaders } from "@tanstack/react-start/server";
 import type { AskResponse, AskResult } from "./ask-types";
+import { paperRagProxyHeaders } from "./proxy-headers.server";
 
 const BACKEND_BASE_URL = "https://furiosa-multimodal-rag.onrender.com";
 const ASK_API_URL = `${BACKEND_BASE_URL}/ask`;
@@ -13,7 +15,10 @@ export async function askBackend(question: string, documentId: string): Promise<
   try {
     const res = await fetch(ASK_API_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...paperRagProxyHeaders(getRequestHeaders()),
+      },
       body: JSON.stringify({ question, document_id: documentId }),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });

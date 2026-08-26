@@ -14,6 +14,12 @@ function friendlyErrorMessage(status: number | null): string {
   if (status === 422) {
     return "The question couldn't be processed by the service. Try rephrasing it and sending again.";
   }
+  if (status === 429) {
+    return "Too many requests. Please wait a few minutes and try again.";
+  }
+  if (status === 503) {
+    return "The demo is currently busy. Please try again shortly.";
+  }
   // 500 / 502 / 503 / network / cold start
   return "The AI service is waking up or temporarily unavailable. Please try again in a moment.";
 }

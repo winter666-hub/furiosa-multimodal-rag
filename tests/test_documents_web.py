@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import json
+from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -154,6 +156,91 @@ def test_duplicate_upload_has_stable_id_and_reuses_processing(tmp_path: Path) ->
     assert first.json()["cache_hit"] is False
     assert second.json()["cache_hit"] is True
     assert service.processing_calls == 1
+
+
+def _set_access_time(document: RegisteredDocument, timestamp: float) -> None:
+    metadata_path = document.pdf_path.parent / "metadata.json"
+    payload = json.loads(metadata_path.read_text(encoding="utf-8"))
+    payload["created_at"] = timestamp
+    payload["last_accessed_at"] = timestamp
+    metadata_path.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def test_cleanup_removes_expired_document_directory(tmp_path: Path) -> None:
+    store = DocumentStore(tmp_path, max_upload_bytes=1024 * 1024, document_ttl_hours=1)
+    expired = _register(store, _pdf_bytes("expired"))
+    current = _register(store, _pdf_bytes("current"))
+    _set_access_time(expired, 1_000)
+    _set_access_time(current, 10_000)
+
+    removed = store.cleanup(now=10_000)
+
+    assert removed == [expired.record.document_id]
+    assert not expired.pdf_path.parent.exists()
+    assert current.pdf_path.is_file()
+
+
+def test_cleanup_enforces_document_count_oldest_first(tmp_path: Path) -> None:
+    store = DocumentStore(
+        tmp_path,
+        max_upload_bytes=1024 * 1024,
+        max_documents=2,
+        document_ttl_hours=1_000_000_000,
+    )
+    first = _register(store, _pdf_bytes("first"))
+    _set_access_time(first, 1_000)
+    second = _register(store, _pdf_bytes("second"))
+    _set_access_time(second, 2_000)
+    third = _register(store, _pdf_bytes("third"))
+
+    assert not first.pdf_path.parent.exists()
+    assert second.pdf_path.is_file() and third.pdf_path.is_file()
+
+
+def test_cleanup_enforces_storage_cap(tmp_path: Path) -> None:
+    content_a = _pdf_bytes("storage-a")
+    content_b = _pdf_bytes("storage-b")
+    cap = max(len(content_a), len(content_b)) + 200
+    store = DocumentStore(
+        tmp_path,
+        max_upload_bytes=1024 * 1024,
+        max_storage_bytes=cap,
+    )
+    first = _register(store, content_a)
+    _set_access_time(first, 1_000)
+    second = _register(store, content_b)
+
+    assert not first.pdf_path.parent.exists()
+    assert second.pdf_path.is_file()
+
+
+def test_cleanup_preserves_active_document(tmp_path: Path) -> None:
+    store = DocumentStore(tmp_path, max_upload_bytes=1024 * 1024, document_ttl_hours=1)
+    document = _register(store, _pdf_bytes("active"))
+    _set_access_time(document, 1_000)
+
+    with store.processing(document.record.document_id):
+        assert store.cleanup(now=10_000) == []
+        assert document.pdf_path.is_file()
+
+
+def test_same_pdf_concurrent_registration_is_atomic(tmp_path: Path) -> None:
+    store = DocumentStore(tmp_path, max_upload_bytes=1024 * 1024)
+    content = _pdf_bytes("concurrent")
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(
+            executor.map(
+                lambda name: _register(store, content, name),
+                ("first.pdf", "second.pdf"),
+            )
+        )
+
+    assert results[0].record.document_id == results[1].record.document_id
+    metadata_path = results[0].pdf_path.parent / "metadata.json"
+    assert json.loads(metadata_path.read_text(encoding="utf-8"))["document_id"] == results[0].record.document_id
+    assert results[0].pdf_path.read_bytes() == content
+    assert list(results[0].pdf_path.parent.glob(".metadata.*.tmp")) == []
 
 
 class IsolatedPipeline:

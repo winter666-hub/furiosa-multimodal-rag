@@ -113,6 +113,26 @@ FURIOSA_EMBEDDING_BASE_URL=
 FURIOSA_RERANKER_BASE_URL=
 ```
 
+## Public demo deployment safety
+
+The hosted demo applies process-local IP rate limits to PDF uploads and
+questions, limits concurrent model work, and rejects PDFs above 25 MB. Uploaded
+document directories are bounded by a six-hour TTL, a 20-document count cap,
+and a 500 MB aggregate storage cap by default. Cleanup protects documents that
+are currently being indexed or queried.
+
+These are minimum safeguards for a single Render demo instance, not distributed
+production security. The limiter state resets on restart, and Render's local
+filesystem is ephemeral. Multi-instance or higher-volume deployments should use
+Cloudflare Rate Limiting, Durable Objects, Redis, or another shared limiter and
+durable object storage. See `DEPLOY_RENDER.md` for all configuration variables.
+
+The Cloudflare Worker and Render service must share the same server-side
+`PAPER_RAG_PROXY_SECRET`. This allows Render to trust the Worker's
+`CF-Connecting-IP` forwarding without trusting spoofable client headers. The
+proxy secret is independent of `FURIOSA_API_KEY`; neither value belongs in the
+browser bundle or repository.
+
 ## 테스트
 
 ```powershell
