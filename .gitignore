@@ -31,3 +31,7 @@ vision_*_check_*.txt
 src/*.egg-info/
 
 vl_test.py
+
+# Benchmark runtime outputs
+benchmarks/*_results.csv
+benchmarks/e2e_smoke.jsonl

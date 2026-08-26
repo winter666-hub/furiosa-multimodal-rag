@@ -133,3 +133,12 @@ Top-k별 latency 비교 결과는 다음 명령으로 CSV에 저장할 수 있�
 ```powershell
 python -m furiosa_rag.cli.benchmark "data/attention_is_all_you_need.pdf" "Why do the authors use multi-head attention?" --top-k 3 5 10 20 --top-n 3 --output "data/benchmarks/attention_top_k.csv"
 ```
+
+## Router benchmark
+
+The deterministic rule router can be evaluated without Furiosa APIs, vision models, or an NPU:
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m furiosa_rag.cli.benchmark_router benchmarks/router_eval.jsonl --output benchmarks/router_results.csv
+```

@@ -1,0 +1,15 @@
+{"id":"E_T01","reference":"Multi-head attention은 여러 attention head가 서로 다른 learned projection과 representation subspace에서 정보를 병렬로 포착하도록 한다. 단일 attention head에서는 여러 관계가 평균화될 수 있지만 multi-head attention은 서로 다른 위치와 표현의 관계를 동시에 학습할 수 있다."}
+{"id":"E_T02","reference":"Scaled dot-product attention에서 dot product를 sqrt(d_k)로 나누는 이유는 d_k가 커질수록 Q와 K의 dot product 크기가 커져 softmax가 매우 작은 gradient를 갖는 영역으로 들어가는 것을 방지하기 위해서다."}
+{"id":"E_T03","reference":"Transformer에는 recurrence나 convolution이 없기 때문에 token의 순서 정보를 자체적으로 알 수 없다. 따라서 positional encoding을 embedding에 더해 sequence 내 위치 정보를 모델에 제공한다."}
+{"id":"E_T04","reference":"Self-attention의 한 layer 계산 복잡도는 sequence length n과 representation dimension d에 대해 O(n^2 d)이다. Recurrent layer의 복잡도는 O(n d^2)이다."}
+{"id":"E_T05","reference":"Decoder의 masked self-attention은 위치 i의 예측이 미래 위치의 token을 참조하지 못하게 하여 autoregressive property를 유지하기 위해 사용한다."}
+{"id":"E_V01","reference":"Figure 1에서 Encoder layer는 Multi-Head Self-Attention과 Feed Forward의 두 sub-layer로 구성된다. Decoder layer는 Masked Multi-Head Self-Attention, Encoder-Decoder Multi-Head Attention, Feed Forward의 세 sub-layer로 구성된다."}
+{"id":"E_V02","reference":"Figure 1에서 positional encoding은 input embedding과 output embedding 각각에 더해진 뒤 Encoder와 Decoder의 첫 attention block으로 전달된다."}
+{"id":"E_V03","reference":"Figure 1에서 Masked Multi-Head Attention은 Decoder stack의 가장 아래쪽 첫 번째 attention sub-layer에 위치하며, 그 위에 Encoder-Decoder Multi-Head Attention과 Feed Forward가 이어진다."}
+{"id":"E_V04","reference":"Table 1에서 Self-Attention의 per-layer complexity는 O(n^2 d)이고 Recurrent layer는 O(n d^2)이다."}
+{"id":"E_V05","reference":"Table 1에서 Self-Attention의 maximum path length는 O(1)로 가장 짧다. Recurrent layer는 O(n), Convolutional layer는 O(log_k(n)) 또는 O(n/k) 형태로 제시된다."}
+{"id":"E_A01","reference":"Encoder stack의 출력 representation은 Decoder의 두 번째 attention sub-layer인 encoder-decoder multi-head attention으로 전달되어 key와 value로 사용된다."}
+{"id":"E_A02","reference":"Input embedding에 positional encoding이 더해진 뒤 Encoder의 첫 번째 Multi-Head Self-Attention sub-layer로 입력된다."}
+{"id":"E_A03","reference":"Decoder의 masked multi-head self-attention 다음에는 encoder-decoder multi-head attention이 오고, 그 다음에는 position-wise feed-forward network가 온다. 각 sub-layer에는 residual connection과 layer normalization이 적용된다."}
+{"id":"E_A04","reference":"Encoder에서는 self-attention과 feed-forward 각각 뒤에 Add & Norm이 위치한다. Decoder에서는 masked self-attention, encoder-decoder attention, feed-forward 각각 뒤에 Add & Norm이 위치한다."}
+{"id":"E_A05","reference":"Output embedding에 positional encoding을 더해 Decoder에 입력하고, masked self-attention과 encoder-decoder attention, feed-forward layers를 거친 뒤 Linear projection과 Softmax를 통해 다음 token의 확률 분포를 생성한다."}

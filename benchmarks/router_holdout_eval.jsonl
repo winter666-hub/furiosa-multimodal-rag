@@ -1,0 +1,60 @@
+{"id":"H_T01","question":"왜 attention score에 softmax를 적용하는가?","expected_route":"TEXT_ONLY","category":"text"}
+{"id":"H_T02","question":"쿼리와 키의 내적이 토큰 유사도를 나타내는 원리를 설명해줘.","expected_route":"TEXT_ONLY","category":"text"}
+{"id":"H_T03","question":"학습 과정에서 teacher forcing이 decoder에 주는 효과는 무엇인가?","expected_route":"TEXT_ONLY","category":"text"}
+{"id":"H_T04","question":"레이어 정규화의 위치에 따라 pre-norm과 post-norm의 학습 안정성이 어떻게 달라지는가?","expected_route":"TEXT_ONLY","category":"text"}
+{"id":"H_T05","question":"토큰을 vocabulary index로 변환하는 순서를 개념적으로 설명해줘.","expected_route":"TEXT_ONLY","category":"text"}
+{"id":"H_T06","question":"잔차 연결이 깊은 네트워크의 gradient 흐름을 개선하는 이유는 무엇인가?","expected_route":"TEXT_ONLY","category":"text"}
+{"id":"H_T07","question":"encoder-only와 decoder-only architecture의 사용 목적을 비교해줘.","expected_route":"TEXT_ONLY","category":"text"}
+{"id":"H_T08","question":"head 수와 hidden dimension의 구성 비율이 모델 용량에 미치는 영향을 설명해줘.","expected_route":"TEXT_ONLY","category":"text"}
+{"id":"H_T09","question":"causal masking이 미래 토큰과의 연결을 차단해야 하는 이유는 무엇인가?","expected_route":"TEXT_ONLY","category":"text"}
+{"id":"H_T10","question":"cross-attention에서 query, key, value가 각각 어느 표현에서 만들어지는가?","expected_route":"TEXT_ONLY","category":"text"}
+{"id":"H_T11","question":"Transformer 구조가 긴 문맥을 처리할 때 갖는 계산상 한계는 무엇인가?","expected_route":"TEXT_ONLY","category":"text"}
+{"id":"H_T12","question":"학습률 warmup 과정이 초기 최적화에 필요한 이유를 설명해줘.","expected_route":"TEXT_ONLY","category":"text"}
+{"id":"H_T13","question":"BPE와 WordPiece의 subword 구성 방식을 비교해줘.","expected_route":"TEXT_ONLY","category":"text"}
+{"id":"H_T14","question":"attention 출력과 residual branch를 더하는 과정에서 차원이 같아야 하는 이유는?","expected_route":"TEXT_ONLY","category":"text"}
+{"id":"H_T15","question":"문장 내 단어의 상대적 위치를 학습하는 방식에는 무엇이 있는가?","expected_route":"TEXT_ONLY","category":"text"}
+{"id":"H_T16","question":"autoregressive generation에서 확률 계산과 토큰 선택의 순서를 설명해줘.","expected_route":"TEXT_ONLY","category":"text"}
+{"id":"H_T17","question":"전체 Transformer architecture의 설계 철학이 recurrence와 어떻게 다른가?","expected_route":"TEXT_ONLY","category":"text"}
+{"id":"H_T18","question":"정보 흐름이라는 관점에서 residual connection이 gradient 소실을 줄이는 원리는?","expected_route":"TEXT_ONLY","category":"text"}
+{"id":"H_T19","question":"encoder와 decoder의 파라미터를 공유했을 때 얻는 장단점을 비교해줘.","expected_route":"TEXT_ONLY","category":"text"}
+{"id":"H_T20","question":"모델 구조를 변경하지 않고 sequence length를 늘릴 때 발생하는 메모리 비용은?","expected_route":"TEXT_ONLY","category":"text"}
+{"id":"H_V01","question":"Figure 2에 표시된 attention weight 분포에서 가장 두드러진 패턴은 무엇인가?","expected_route":"VISUAL_REQUIRED","category":"explicit_visual"}
+{"id":"H_V02","question":"Fig. 4의 두 패널이 보여주는 학습 곡선 차이를 요약해줘.","expected_route":"VISUAL_REQUIRED","category":"explicit_visual"}
+{"id":"H_V03","question":"Table 3에서 BLEU가 가장 높은 설정과 두 번째 설정의 차이는 얼마인가?","expected_route":"VISUAL_REQUIRED","category":"explicit_visual"}
+{"id":"H_V04","question":"architecture diagram에 그려진 skip path는 어느 모듈을 우회하는가?","expected_route":"VISUAL_REQUIRED","category":"explicit_visual"}
+{"id":"H_V05","question":"이 chart에서 validation loss가 최저점에 도달한 epoch를 알려줘.","expected_route":"VISUAL_REQUIRED","category":"explicit_visual"}
+{"id":"H_V06","question":"첨부 image의 색상별 attention head가 가리키는 토큰을 읽어줘.","expected_route":"VISUAL_REQUIRED","category":"explicit_visual"}
+{"id":"H_V07","question":"Figure 5의 왼쪽 패널과 오른쪽 패널에서 activation 범위가 어떻게 다른가?","expected_route":"VISUAL_REQUIRED","category":"explicit_visual"}
+{"id":"H_V08","question":"Table 6의 ablation 결과 중 성능 하락 폭이 가장 큰 행은 무엇인가?","expected_route":"VISUAL_REQUIRED","category":"explicit_visual"}
+{"id":"H_V09","question":"Fig. 7에 있는 범례와 선 모양을 기준으로 어떤 모델이 더 빨리 수렴하는지 판단해줘.","expected_route":"VISUAL_REQUIRED","category":"explicit_visual"}
+{"id":"H_V10","question":"diagram의 점선 화살표가 나타내는 선택적 경로를 설명해줘.","expected_route":"VISUAL_REQUIRED","category":"explicit_visual"}
+{"id":"H_V11","question":"성능 chart에서 batch size가 증가할 때 throughput 막대가 어떻게 변하는가?","expected_route":"VISUAL_REQUIRED","category":"explicit_visual"}
+{"id":"H_V12","question":"이 image에 표시된 행렬의 대각선 패턴을 해석해줘.","expected_route":"VISUAL_REQUIRED","category":"explicit_visual"}
+{"id":"H_V13","question":"Figure 8에서 빨간색으로 강조된 연산은 어느 단계에 속하는가?","expected_route":"VISUAL_REQUIRED","category":"explicit_visual"}
+{"id":"H_V14","question":"Table 2의 parameter count 열을 기준으로 base와 large의 비율을 계산해줘.","expected_route":"VISUAL_REQUIRED","category":"explicit_visual"}
+{"id":"H_V15","question":"Fig. 9의 x축과 y축이 각각 어떤 변수를 나타내는지 알려줘.","expected_route":"VISUAL_REQUIRED","category":"explicit_visual"}
+{"id":"H_V16","question":"그림 속에서 normalization 다음에 나오는 연산 상자의 이름은 무엇인가?","expected_route":"VISUAL_REQUIRED","category":"explicit_visual"}
+{"id":"H_V17","question":"표의 세 번째 열에서 굵게 표시된 수치들을 비교해줘.","expected_route":"VISUAL_REQUIRED","category":"explicit_visual"}
+{"id":"H_V18","question":"실험 graph에서 두 곡선이 교차하는 지점의 대략적인 step은 얼마인가?","expected_route":"VISUAL_REQUIRED","category":"explicit_visual"}
+{"id":"H_V19","question":"첨부된 도식에서 회색 영역이 포함하는 레이어들을 나열해줘.","expected_route":"VISUAL_REQUIRED","category":"explicit_visual"}
+{"id":"H_V20","question":"시각 자료에 나타난 세 모델의 latency 막대 높이를 비교해줘.","expected_route":"VISUAL_REQUIRED","category":"explicit_visual"}
+{"id":"H_A01","question":"두 갈래로 나뉜 계산 경로가 어느 연산 직전에 다시 합쳐지는지 알려줘.","expected_route":"VISUAL_REQUIRED","category":"implicit_visual"}
+{"id":"H_A02","question":"회색 상자 바로 위와 아래에 놓인 모듈의 이름을 순서대로 말해줘.","expected_route":"VISUAL_REQUIRED","category":"implicit_visual"}
+{"id":"H_A03","question":"점선으로 이어진 화살표의 출발 블록과 도착 블록은 각각 무엇인가?","expected_route":"VISUAL_REQUIRED","category":"implicit_visual"}
+{"id":"H_A04","question":"세로로 쌓인 연산들 가운데 두 번째와 네 번째 단계가 어떻게 다른가?","expected_route":"VISUAL_REQUIRED","category":"implicit_visual"}
+{"id":"H_A05","question":"파란 선이 encoder 쪽에서 decoder 쪽으로 넘어갈 때 처음 만나는 층은 무엇인가?","expected_route":"VISUAL_REQUIRED","category":"implicit_visual"}
+{"id":"H_A06","question":"가장 오른쪽 열에서 정확도가 최고인 행의 모델명과 latency 값을 함께 찾아줘.","expected_route":"VISUAL_REQUIRED","category":"implicit_visual"}
+{"id":"H_A07","question":"Add & Norm 상자가 두 번 반복되는 구간 사이에는 어떤 연산이 끼어 있는가?","expected_route":"VISUAL_REQUIRED","category":"implicit_visual"}
+{"id":"H_A08","question":"입력 토큰에서 예측 확률까지 굵은 화살표를 따라 만나는 요소를 차례로 나열해줘.","expected_route":"VISUAL_REQUIRED","category":"implicit_visual"}
+{"id":"H_A09","question":"왼쪽 묶음에는 있지만 오른쪽 묶음에는 없는 구성요소를 찾아줘.","expected_route":"VISUAL_REQUIRED","category":"implicit_visual"}
+{"id":"H_A10","question":"같은 행에 기록된 메모리 사용량과 처리 속도의 수치를 짝지어 알려줘.","expected_route":"VISUAL_REQUIRED","category":"implicit_visual"}
+{"id":"H_A11","question":"positional encoding이 더해지는 지점은 embedding 상자의 전후 중 어느 쪽인가?","expected_route":"VISUAL_REQUIRED","category":"implicit_visual"}
+{"id":"H_A12","question":"마지막 attention block에서 나온 신호는 어느 두 곳으로 갈라지는가?","expected_route":"VISUAL_REQUIRED","category":"implicit_visual"}
+{"id":"H_A13","question":"위쪽 가지와 아래쪽 가지 중 normalization을 먼저 통과하는 쪽은 어디인가?","expected_route":"VISUAL_REQUIRED","category":"implicit_visual"}
+{"id":"H_A14","question":"가운데 열의 값이 동일한 두 실험에서 맨 끝 열의 값은 얼마나 차이 나는가?","expected_route":"VISUAL_REQUIRED","category":"implicit_visual"}
+{"id":"H_A15","question":"decoder 내부에서 masked attention 다음 상자와 그다음 상자를 읽어줘.","expected_route":"VISUAL_REQUIRED","category":"implicit_visual"}
+{"id":"H_A16","question":"잔차 경로가 주 연산을 건너뛰어 합류하는 위치를 찾아 설명해줘.","expected_route":"VISUAL_REQUIRED","category":"implicit_visual"}
+{"id":"H_A17","question":"각 head에서 뻗은 선들이 최종적으로 모이는 공통 연산은 무엇인가?","expected_route":"VISUAL_REQUIRED","category":"implicit_visual"}
+{"id":"H_A18","question":"아래에서 위로 읽었을 때 softmax에 도달하기 전에 거치는 블록은 무엇인가?","expected_route":"VISUAL_REQUIRED","category":"implicit_visual"}
+{"id":"H_A19","question":"가로축의 중간 구간에서 실선과 점선 중 더 높은 쪽을 판별해줘.","expected_route":"VISUAL_REQUIRED","category":"implicit_visual"}
+{"id":"H_A20","question":"두 component group의 상대적 크기와 서로 맞닿은 경계를 설명해줘.","expected_route":"VISUAL_REQUIRED","category":"implicit_visual"}

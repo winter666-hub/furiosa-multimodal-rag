@@ -1,0 +1,30 @@
+{"id":"T01","question":"왜 multi-head attention을 사용하는가?","expected_route":"TEXT_ONLY","category":"text"}
+{"id":"T02","question":"scaled dot-product attention에서 왜 d_k로 나누는가?","expected_route":"TEXT_ONLY","category":"text"}
+{"id":"T03","question":"positional encoding이 필요한 이유는 무엇인가?","expected_route":"TEXT_ONLY","category":"text"}
+{"id":"T04","question":"Transformer가 RNN보다 병렬화에 유리한 이유는 무엇인가?","expected_route":"TEXT_ONLY","category":"text"}
+{"id":"T05","question":"self-attention의 computational complexity는 sequence length와 어떤 관계가 있는가?","expected_route":"TEXT_ONLY","category":"text"}
+{"id":"T06","question":"Transformer에서 feed-forward network의 역할은 무엇인가?","expected_route":"TEXT_ONLY","category":"text"}
+{"id":"T07","question":"residual connection과 layer normalization은 왜 사용하는가?","expected_route":"TEXT_ONLY","category":"text"}
+{"id":"T08","question":"decoder에서 masking이 필요한 이유는 무엇인가?","expected_route":"TEXT_ONLY","category":"text"}
+{"id":"T09","question":"Transformer base와 big 모델의 주요 차이는 무엇인가?","expected_route":"TEXT_ONLY","category":"text"}
+{"id":"T10","question":"저자들은 convolution과 recurrence 대신 attention을 사용한 이유는 무엇인가?","expected_route":"TEXT_ONLY","category":"text"}
+{"id":"V01","question":"Figure 1에서 Encoder와 Decoder의 구조 차이를 설명해줘.","expected_route":"VISUAL_REQUIRED","category":"explicit_visual"}
+{"id":"V02","question":"Figure 1에서 Encoder output은 Decoder의 어느 부분으로 연결되는가?","expected_route":"VISUAL_REQUIRED","category":"explicit_visual"}
+{"id":"V03","question":"Figure 1에서 Masked Multi-Head Attention은 어디에 위치하는가?","expected_route":"VISUAL_REQUIRED","category":"explicit_visual"}
+{"id":"V04","question":"Figure 1의 Encoder 블록 내부 구성요소를 위에서 아래 순서로 설명해줘.","expected_route":"VISUAL_REQUIRED","category":"explicit_visual"}
+{"id":"V05","question":"Figure 1의 Decoder 블록 내부 구성요소를 순서대로 설명해줘.","expected_route":"VISUAL_REQUIRED","category":"explicit_visual"}
+{"id":"V06","question":"Table 1에서 Self-Attention과 Recurrent layer의 complexity를 비교해줘.","expected_route":"VISUAL_REQUIRED","category":"explicit_visual"}
+{"id":"V07","question":"Table 1에서 maximum path length가 가장 짧은 layer type은 무엇인가?","expected_route":"VISUAL_REQUIRED","category":"explicit_visual"}
+{"id":"V08","question":"Table 1에서 convolutional layer와 self-attention의 sequential operations를 비교해줘.","expected_route":"VISUAL_REQUIRED","category":"explicit_visual"}
+{"id":"V09","question":"논문의 architecture diagram에서 positional encoding이 어디에 더해지는지 설명해줘.","expected_route":"VISUAL_REQUIRED","category":"explicit_visual"}
+{"id":"V10","question":"그림(image)에서 Decoder의 최종 출력이 Linear와 Softmax로 어떻게 연결되는지 설명해줘.","expected_route":"VISUAL_REQUIRED","category":"explicit_visual"}
+{"id":"A01","question":"Encoder와 Decoder의 블록 구성 차이를 한눈에 비교해서 설명해줘.","expected_route":"VISUAL_REQUIRED","category":"implicit_visual"}
+{"id":"A02","question":"Encoder에서 생성된 정보가 Decoder로 어떻게 전달되는지 연결 관계를 설명해줘.","expected_route":"VISUAL_REQUIRED","category":"implicit_visual"}
+{"id":"A03","question":"입력 임베딩부터 Encoder의 첫 번째 attention block까지 데이터가 어떻게 흐르는가?","expected_route":"VISUAL_REQUIRED","category":"implicit_visual"}
+{"id":"A04","question":"Decoder에서 출력 임베딩이 최종 확률 분포가 되기까지의 흐름을 설명해줘.","expected_route":"VISUAL_REQUIRED","category":"implicit_visual"}
+{"id":"A05","question":"Encoder와 Decoder에서 Add & Norm은 각각 어디에 배치되는지 비교해줘.","expected_route":"VISUAL_REQUIRED","category":"implicit_visual"}
+{"id":"A06","question":"Decoder가 Encoder보다 추가로 가지고 있는 attention block은 무엇이며 어디에 위치하는가?","expected_route":"VISUAL_REQUIRED","category":"implicit_visual"}
+{"id":"A07","question":"모델 전체에서 positional encoding이 적용되는 위치를 설명해줘.","expected_route":"VISUAL_REQUIRED","category":"implicit_visual"}
+{"id":"A08","question":"입력과 출력 경로가 서로 갈라졌다가 다시 연결되는 지점을 설명해줘.","expected_route":"VISUAL_REQUIRED","category":"implicit_visual"}
+{"id":"A09","question":"Encoder와 Decoder 각각에서 attention과 feed-forward가 어떤 순서로 배치되는가?","expected_route":"VISUAL_REQUIRED","category":"implicit_visual"}
+{"id":"A10","question":"전체 Transformer architecture의 정보 흐름을 시작부터 끝까지 설명해줘.","expected_route":"VISUAL_REQUIRED","category":"implicit_visual"}

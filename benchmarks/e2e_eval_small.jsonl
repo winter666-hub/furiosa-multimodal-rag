@@ -1,0 +1,15 @@
+{"id":"E_T01","question":"왜 multi-head attention을 사용하는가?","category":"text"}
+{"id":"E_T02","question":"scaled dot-product attention에서 점곱 결과를 sqrt(d_k)로 나누는 이유는 무엇인가?","category":"text"}
+{"id":"E_T03","question":"Transformer에 positional encoding이 필요한 이유를 설명해줘.","category":"text"}
+{"id":"E_T04","question":"self-attention의 계산 복잡도는 sequence length에 따라 어떻게 변하는가?","category":"text"}
+{"id":"E_T05","question":"decoder의 self-attention에서 future position을 masking하는 이유는 무엇인가?","category":"text"}
+{"id":"E_V01","question":"Figure 1을 기준으로 Encoder와 Decoder의 블록 구성이 어떻게 다른지 설명해줘.","category":"explicit_visual"}
+{"id":"E_V02","question":"Figure 1에서 positional encoding은 embedding과 어느 지점에서 결합되는가?","category":"explicit_visual"}
+{"id":"E_V03","question":"Figure 1의 Masked Multi-Head Attention은 Decoder 내부의 어느 위치에 있는가?","category":"explicit_visual"}
+{"id":"E_V04","question":"Table 1에서 Self-Attention과 Recurrent layer의 per-layer complexity를 비교해줘.","category":"explicit_visual"}
+{"id":"E_V05","question":"Table 1에서 maximum path length가 가장 짧은 layer type과 그 값을 알려줘.","category":"explicit_visual"}
+{"id":"E_A01","question":"Encoder에서 나온 표현이 Decoder의 어떤 attention 블록으로 연결되는가?","category":"implicit_visual"}
+{"id":"E_A02","question":"입력 embedding부터 첫 번째 encoder attention 연산까지 거치는 요소를 순서대로 설명해줘.","category":"implicit_visual"}
+{"id":"E_A03","question":"Decoder에서 masked attention 다음에 배치된 두 연산 블록은 무엇인가?","category":"implicit_visual"}
+{"id":"E_A04","question":"Encoder와 Decoder에서 Add & Norm이 각각 어느 연산 뒤에 놓이는지 비교해줘.","category":"implicit_visual"}
+{"id":"E_A05","question":"출력 embedding에서 최종 단어 확률이 만들어질 때까지의 블록 흐름을 설명해줘.","category":"implicit_visual"}
