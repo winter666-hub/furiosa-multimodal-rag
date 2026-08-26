@@ -10,11 +10,18 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiPublicDocumentsRouteImport } from './routes/api/public/documents'
 import { Route as ApiPublicDocumentPagePageRouteImport } from './routes/api/public/document-page/$page'
+import { Route as ApiPublicDocumentsDocumentIdPagesPageRouteImport } from './routes/api/public/documents/$documentId/pages/$page'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicDocumentsRoute = ApiPublicDocumentsRouteImport.update({
+  id: '/api/public/documents',
+  path: '/api/public/documents',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPublicDocumentPagePageRoute =
@@ -23,30 +30,56 @@ const ApiPublicDocumentPagePageRoute =
     path: '/api/public/document-page/$page',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicDocumentsDocumentIdPagesPageRoute =
+  ApiPublicDocumentsDocumentIdPagesPageRouteImport.update({
+    id: '/$documentId/pages/$page',
+    path: '/$documentId/pages/$page',
+    getParentRoute: () => ApiPublicDocumentsRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/api/public/documents': typeof ApiPublicDocumentsRouteWithChildren
   '/api/public/document-page/$page': typeof ApiPublicDocumentPagePageRoute
+  '/api/public/documents/$documentId/pages/$page': typeof ApiPublicDocumentsDocumentIdPagesPageRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/api/public/documents': typeof ApiPublicDocumentsRouteWithChildren
   '/api/public/document-page/$page': typeof ApiPublicDocumentPagePageRoute
+  '/api/public/documents/$documentId/pages/$page': typeof ApiPublicDocumentsDocumentIdPagesPageRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/api/public/documents': typeof ApiPublicDocumentsRouteWithChildren
   '/api/public/document-page/$page': typeof ApiPublicDocumentPagePageRoute
+  '/api/public/documents/$documentId/pages/$page': typeof ApiPublicDocumentsDocumentIdPagesPageRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/api/public/document-page/$page'
+  fullPaths:
+    | '/'
+    | '/api/public/documents'
+    | '/api/public/document-page/$page'
+    | '/api/public/documents/$documentId/pages/$page'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/api/public/document-page/$page'
-  id: '__root__' | '/' | '/api/public/document-page/$page'
+  to:
+    | '/'
+    | '/api/public/documents'
+    | '/api/public/document-page/$page'
+    | '/api/public/documents/$documentId/pages/$page'
+  id:
+    | '__root__'
+    | '/'
+    | '/api/public/documents'
+    | '/api/public/document-page/$page'
+    | '/api/public/documents/$documentId/pages/$page'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ApiPublicDocumentsRoute: typeof ApiPublicDocumentsRouteWithChildren
   ApiPublicDocumentPagePageRoute: typeof ApiPublicDocumentPagePageRoute
 }
 
@@ -59,6 +92,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/documents': {
+      id: '/api/public/documents'
+      path: '/api/public/documents'
+      fullPath: '/api/public/documents'
+      preLoaderRoute: typeof ApiPublicDocumentsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/document-page/$page': {
       id: '/api/public/document-page/$page'
       path: '/api/public/document-page/$page'
@@ -66,11 +106,31 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicDocumentPagePageRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/documents/$documentId/pages/$page': {
+      id: '/api/public/documents/$documentId/pages/$page'
+      path: '/$documentId/pages/$page'
+      fullPath: '/api/public/documents/$documentId/pages/$page'
+      preLoaderRoute: typeof ApiPublicDocumentsDocumentIdPagesPageRouteImport
+      parentRoute: typeof ApiPublicDocumentsRoute
+    }
   }
 }
 
+interface ApiPublicDocumentsRouteChildren {
+  ApiPublicDocumentsDocumentIdPagesPageRoute: typeof ApiPublicDocumentsDocumentIdPagesPageRoute
+}
+
+const ApiPublicDocumentsRouteChildren: ApiPublicDocumentsRouteChildren = {
+  ApiPublicDocumentsDocumentIdPagesPageRoute:
+    ApiPublicDocumentsDocumentIdPagesPageRoute,
+}
+
+const ApiPublicDocumentsRouteWithChildren =
+  ApiPublicDocumentsRoute._addFileChildren(ApiPublicDocumentsRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ApiPublicDocumentsRoute: ApiPublicDocumentsRouteWithChildren,
   ApiPublicDocumentPagePageRoute: ApiPublicDocumentPagePageRoute,
 }
 export const routeTree = rootRouteImport

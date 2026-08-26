@@ -77,11 +77,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Furiosa Agentic PDF RAG" },
+      { title: "Furiosa Paper RAG" },
       {
         name: "description",
         content:
-          "Selective multimodal RAG research demo over the Attention Is All You Need paper.",
+          "Upload a research paper and ask grounded questions with selective multimodal RAG.",
       },
     ],
     links: [
@@ -110,7 +110,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="ko">
       <head>
         <HeadContent />
       </head>

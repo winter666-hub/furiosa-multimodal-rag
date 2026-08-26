@@ -8,6 +8,9 @@ export type ChatEntry =
   | { id: string; role: "error"; status: number | null; question: string };
 
 function friendlyErrorMessage(status: number | null): string {
+  if (status === 404) {
+    return "업로드한 문서를 서버에서 찾을 수 없습니다. PDF를 다시 업로드해 주세요.";
+  }
   if (status === 422) {
     return "The question couldn't be processed by the service. Try rephrasing it and sending again.";
   }
@@ -15,13 +18,7 @@ function friendlyErrorMessage(status: number | null): string {
   return "The AI service is waking up or temporarily unavailable. Please try again in a moment.";
 }
 
-function RouteBadge({
-  route,
-  reason,
-}: {
-  route: string;
-  reason?: string | undefined;
-}) {
+function RouteBadge({ route, reason }: { route: string; reason?: string | undefined }) {
   const isVisual = route === "VISUAL_REQUIRED";
   return (
     <span
@@ -42,7 +39,7 @@ function AnswerMetadata({
   onViewPage,
 }: {
   data: AskResponse;
-  onViewPage: (page: number) => void;
+  onViewPage: (page: number, documentId: string) => void;
 }) {
   const pages = Array.from(new Set(data.sources.map((s) => s.page)));
   const latencySec = (data.latency_ms.total / 1000).toFixed(1);
@@ -72,7 +69,8 @@ function AnswerMetadata({
             <button
               key={p}
               type="button"
-              onClick={() => onViewPage(p)}
+              onClick={() => data.document_id && onViewPage(p, data.document_id)}
+              disabled={!data.document_id}
               className="rounded-md border border-border bg-card px-1.5 py-0.5 font-mono text-[11px] text-foreground/80 transition-colors hover:border-ring/50 hover:bg-accent hover:text-foreground"
             >
               Page {p}
@@ -89,7 +87,7 @@ function AssistantMessage({
   onViewPage,
 }: {
   data: AskResponse;
-  onViewPage: (page: number) => void;
+  onViewPage: (page: number, documentId: string) => void;
 }) {
   const visualFallback =
     data.route === "VISUAL_REQUIRED" && !data.vision_used && data.fallback_used;
@@ -104,9 +102,8 @@ function AssistantMessage({
         <div className="mx-5 mb-4 flex items-start gap-2.5 rounded-lg border border-highlight-foreground/25 bg-highlight/25 px-3.5 py-3 sm:mx-6">
           <Info className="mt-0.5 size-4 shrink-0 text-highlight-foreground" />
           <p className="text-xs leading-5 text-highlight-foreground">
-            Visual reasoning was requested, but the web demo is currently running
-            in hosted-only mode. The answer was generated using text RAG
-            fallback.
+            Visual reasoning was requested, but the web demo is currently running in hosted-only
+            mode. The answer was generated using text RAG fallback.
           </p>
         </div>
       )}
@@ -122,19 +119,19 @@ function ErrorMessage({
   status,
   question,
   onRetry,
+  onDocumentLost,
 }: {
   status: number | null;
   question: string;
   onRetry: (question: string) => void;
+  onDocumentLost: () => void;
 }) {
   return (
     <div className="animate-fade-up rounded-xl border border-destructive/30 bg-destructive/5 px-5 py-4">
       <div className="flex items-start gap-2.5">
         <AlertCircle className="mt-0.5 size-4 shrink-0 text-destructive" />
         <div className="flex-1">
-          <p className="text-sm leading-6 text-foreground">
-            {friendlyErrorMessage(status)}
-          </p>
+          <p className="text-sm leading-6 text-foreground">{friendlyErrorMessage(status)}</p>
           <button
             type="button"
             onClick={() => onRetry(question)}
@@ -143,6 +140,15 @@ function ErrorMessage({
             <RotateCcw className="size-3" />
             Try again
           </button>
+          {status === 404 && (
+            <button
+              type="button"
+              onClick={onDocumentLost}
+              className="ml-2 mt-2 inline-flex rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground"
+            >
+              PDF 다시 업로드
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -153,10 +159,12 @@ export function ChatEntryView({
   entry,
   onRetry,
   onViewPage,
+  onDocumentLost,
 }: {
   entry: ChatEntry;
   onRetry: (question: string) => void;
-  onViewPage: (page: number) => void;
+  onViewPage: (page: number, documentId: string) => void;
+  onDocumentLost: () => void;
 }) {
   if (entry.role === "user") {
     return (
@@ -177,6 +185,7 @@ export function ChatEntryView({
       status={entry.status}
       question={entry.question}
       onRetry={onRetry}
+      onDocumentLost={onDocumentLost}
     />
   );
 }

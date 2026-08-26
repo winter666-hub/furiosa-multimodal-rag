@@ -1,28 +1,26 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowUp, BookOpenText, FlaskConical } from "lucide-react";
+import { ArrowUp, BookOpenText, FileSearch } from "lucide-react";
 import { askPaperQuestion, getBackendHealth } from "@/lib/ask.functions";
+import type { CurrentDocument } from "@/lib/ask-types";
 import { ChatEntryView, type ChatEntry } from "@/components/chat/chat-message";
 import { TypingIndicator } from "@/components/chat/typing-indicator";
 import { PageViewer } from "@/components/chat/page-viewer";
+import { DocumentUpload } from "@/components/document-upload";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Furiosa Agentic PDF RAG — Selective Multimodal RAG Demo" },
+      { title: "Furiosa Paper RAG · Selective Multimodal Research Demo" },
       {
         name: "description",
         content:
-          'Ask questions about "Attention Is All You Need". The agentic RAG system adaptively decides whether visual reasoning is required.',
+          "Upload a research paper and ask grounded questions with adaptive text and visual routing.",
       },
-      {
-        property: "og:title",
-        content: "Furiosa Agentic PDF RAG — Selective Multimodal RAG Demo",
-      },
+      { property: "og:title", content: "Furiosa Paper RAG" },
       {
         property: "og:description",
-        content:
-          'Interactive research demo: ask questions about "Attention Is All You Need" with adaptive text/visual routing.',
+        content: "Selective multimodal question answering for your PDF.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
@@ -32,118 +30,146 @@ export const Route = createFileRoute("/")({
 });
 
 const SUGGESTED_QUESTIONS = [
-  "왜 multi-head attention을 사용하는가?",
-  "scaled dot-product attention에서 sqrt(d_k)로 나누는 이유는?",
-  "Figure 1에서 Encoder와 Decoder 구조의 차이는?",
-  "Encoder의 출력은 Decoder의 어느 attention block으로 연결되는가?",
+  "이 논문의 핵심 기여를 세 가지로 요약해줘.",
+  "제안한 방법의 전체 구조와 각 구성 요소의 역할은 무엇인가?",
+  "실험 결과에서 기존 방법과 비교해 가장 크게 개선된 지표는 무엇인가?",
+  "저자가 언급한 한계와 향후 연구 방향을 설명해줘.",
 ];
 
 type BackendStatus = "connecting" | "online" | "offline";
+type ViewerState = { documentId: string; filename: string; page: number; totalPages: number };
 
 function DemoPage() {
+  const [document, setDocument] = useState<CurrentDocument | null>(null);
   const [entries, setEntries] = useState<ChatEntry[]>([]);
   const [input, setInput] = useState("");
   const [pending, setPending] = useState(false);
-  const [backendStatus, setBackendStatus] =
-    useState<BackendStatus>("connecting");
-  const [viewerPage, setViewerPage] = useState<number | null>(null);
+  const [backendStatus, setBackendStatus] = useState<BackendStatus>("connecting");
+  const [viewer, setViewer] = useState<ViewerState | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    const el = scrollRef.current;
-    if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [entries, pending]);
 
-  // Warm-up ping on load: wakes a sleeping Render instance before the
-  // first question and drives the header status indicator.
   useEffect(() => {
     let cancelled = false;
-    void getBackendHealth().then((res) => {
-      if (!cancelled) setBackendStatus(res.ok ? "online" : "offline");
+    void getBackendHealth().then((result) => {
+      if (!cancelled) setBackendStatus(result.ok ? "online" : "offline");
     });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  const openViewer = useCallback((page: number) => setViewerPage(page), []);
-  const closeViewer = useCallback(() => setViewerPage(null), []);
+  const closeViewer = useCallback(() => setViewer(null), []);
+  const navigateViewer = useCallback((page: number) => {
+    setViewer((current) => (current ? { ...current, page } : null));
+  }, []);
+  const openViewer = useCallback(
+    (page: number, documentId: string) => {
+      const current = document;
+      if (!current || current.documentId !== documentId) return;
+      setViewer({ documentId, filename: current.filename, page, totalPages: current.pages });
+    },
+    [document],
+  );
 
   async function send(rawQuestion: string) {
     const question = rawQuestion.trim();
-    if (!question || pending) return;
+    const currentDocument = document;
+    if (!question || pending || !currentDocument) return;
 
     setInput("");
     setPending(true);
-    setEntries((prev) => [
-      ...prev,
+    setEntries((previous) => [
+      ...previous,
       { id: crypto.randomUUID(), role: "user", text: question },
     ]);
-
-    const result = await askPaperQuestion({ data: { question } });
-
-    setEntries((prev) => [
-      ...prev,
+    const result = await askPaperQuestion({
+      data: { question, documentId: currentDocument.documentId },
+    });
+    setEntries((previous) => [
+      ...previous,
       result.ok
         ? { id: crypto.randomUUID(), role: "assistant", data: result.data }
-        : {
-            id: crypto.randomUUID(),
-            role: "error",
-            status: result.status,
-            question,
-          },
+        : { id: crypto.randomUUID(), role: "error", status: result.status, question },
     ]);
     if (result.ok) setBackendStatus("online");
     setPending(false);
     inputRef.current?.focus();
   }
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    void send(input);
+  function confirmReplacement() {
+    if (
+      entries.length > 0 &&
+      !window.confirm("PDF를 교체하면 현재 대화 기록이 삭제됩니다. 계속할까요?")
+    )
+      return false;
+    setEntries([]);
+    setViewer(null);
+    return true;
+  }
+
+  function resetMissingDocument() {
+    setDocument(null);
+    setViewer(null);
+    setEntries([]);
   }
 
   return (
     <div className="flex h-dvh flex-col bg-background">
       <header className="border-b border-border bg-background">
-        <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-4 px-4 py-3.5 sm:px-6">
+        <div className="mx-auto flex w-full max-w-4xl items-center justify-between gap-4 px-4 py-3.5 sm:px-6">
           <div className="min-w-0">
-            <h1 className="truncate font-serif text-lg font-semibold tracking-tight text-foreground">
-              Furiosa Agentic PDF RAG
+            <h1 className="truncate font-serif text-lg font-semibold tracking-tight">
+              Furiosa Paper RAG
             </h1>
             <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
-              Selective Multimodal RAG Demo
+              Selective Multimodal Research Demo
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <StatusPill status={backendStatus} />
-            <button
-              type="button"
-              onClick={() => openViewer(1)}
-              title="Browse the paper page by page"
-              className="flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-ring/50 hover:bg-accent hover:text-foreground"
-            >
-              <BookOpenText className="size-3.5" />
-              <span className="hidden font-serif italic sm:inline">
-                Attention Is All You Need
-              </span>
-            </button>
+            {document && (
+              <button
+                type="button"
+                onClick={() => openViewer(1, document.documentId)}
+                title="문서 첫 페이지 보기"
+                className="flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                <BookOpenText className="size-3.5" />
+                <span className="hidden max-w-48 truncate sm:inline">{document.filename}</span>
+              </button>
+            )}
           </div>
         </div>
       </header>
 
       <main ref={scrollRef} className="flex-1 overflow-y-auto">
-        <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 px-4 py-8 sm:px-6">
-          {entries.length === 0 && !pending ? (
-            <EmptyState onAsk={(q) => void send(q)} />
+        <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-4 py-7 sm:px-6">
+          <DocumentUpload
+            document={document}
+            onReplace={confirmReplacement}
+            onUploaded={(next) => {
+              setDocument(next);
+              setEntries([]);
+              setBackendStatus("online");
+            }}
+          />
+          {!document ? (
+            <Welcome />
+          ) : entries.length === 0 && !pending ? (
+            <EmptyState onAsk={(question) => void send(question)} />
           ) : (
             entries.map((entry) => (
               <ChatEntryView
                 key={entry.id}
                 entry={entry}
-                onRetry={(q) => void send(q)}
+                onRetry={(question) => void send(question)}
                 onViewPage={openViewer}
+                onDocumentLost={resetMissingDocument}
               />
             ))
           )}
@@ -153,49 +179,51 @@ function DemoPage() {
 
       <footer className="border-t border-border bg-background">
         <form
-          onSubmit={handleSubmit}
-          className="mx-auto w-full max-w-3xl px-4 py-4 sm:px-6"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void send(input);
+          }}
+          className="mx-auto w-full max-w-4xl px-4 py-4 sm:px-6"
         >
-          <div className="flex items-end gap-2 rounded-2xl border border-input bg-card p-2 shadow-[0_1px_3px_oklch(0.3_0.02_262/0.06)] focus-within:border-ring/60">
+          <div className="flex items-end gap-2 rounded-2xl border border-input bg-card p-2 shadow-sm focus-within:border-ring/60">
             <textarea
               ref={inputRef}
               value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (
-                  e.key === "Enter" &&
-                  !e.shiftKey &&
-                  !e.nativeEvent.isComposing
-                ) {
-                  e.preventDefault();
+              onChange={(event) => setInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+                  event.preventDefault();
                   void send(input);
                 }
               }}
-              placeholder="Ask a question about the paper…"
+              disabled={!document || pending}
+              placeholder={
+                document ? "업로드한 논문에 대해 질문하세요…" : "먼저 PDF를 업로드해 주세요"
+              }
               rows={1}
-              className="field-sizing-content max-h-40 min-h-9 flex-1 resize-none bg-transparent px-2 py-1.5 text-[15px] leading-6 text-foreground outline-none placeholder:text-muted-foreground"
+              className="field-sizing-content max-h-40 min-h-9 flex-1 resize-none bg-transparent px-2 py-1.5 text-[15px] leading-6 outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed"
             />
             <button
               type="submit"
-              disabled={pending || !input.trim()}
-              aria-label="Send question"
-              className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-35"
+              disabled={!document || pending || !input.trim()}
+              aria-label="질문 보내기"
+              className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-35"
             >
               <ArrowUp className="size-4" />
             </button>
           </div>
           <p className="mt-2 text-center text-[11px] text-muted-foreground">
-            Responses are generated by the hosted research backend and may take
-            up to a minute on cold start.
+            응답은 업로드한 PDF만 근거로 생성되며, 콜드 스타트 시 최대 1분 이상 걸릴 수 있습니다.
           </p>
         </form>
       </footer>
 
-      {viewerPage !== null && (
+      {viewer && (
         <PageViewer
-          page={viewerPage}
-          onNavigate={openViewer}
+          {...viewer}
+          onNavigate={navigateViewer}
           onClose={closeViewer}
+          onDocumentLost={resetMissingDocument}
         />
       )}
     </div>
@@ -204,58 +232,51 @@ function DemoPage() {
 
 function StatusPill({ status }: { status: BackendStatus }) {
   const config = {
-    connecting: {
-      dot: "animate-pulse bg-highlight-foreground",
-      label: "Waking backend…",
-      title: "Pinging the hosted backend — cold starts can take up to a minute",
-    },
-    online: {
-      dot: "bg-chart-2",
-      label: "Backend online",
-      title: "The hosted backend is responding",
-    },
-    offline: {
-      dot: "bg-destructive",
-      label: "Backend unreachable",
-      title: "Could not reach the hosted backend",
-    },
+    connecting: ["animate-pulse bg-highlight-foreground", "서버 연결 중"],
+    online: ["bg-chart-2", "서버 연결됨"],
+    offline: ["bg-destructive", "서버 연결 안 됨"],
   }[status];
-
   return (
-    <span
-      title={config.title}
-      className="flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1.5 text-[11px] text-muted-foreground"
-    >
-      <span className={`size-1.5 rounded-full ${config.dot}`} />
-      <span className="hidden md:inline">{config.label}</span>
+    <span className="flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1.5 text-[11px] text-muted-foreground">
+      <span className={`size-1.5 rounded-full ${config[0]}`} />
+      <span className="hidden md:inline">{config[1]}</span>
     </span>
+  );
+}
+
+function Welcome() {
+  return (
+    <div className="animate-fade-up flex flex-col items-center py-5 text-center sm:py-10">
+      <div className="flex size-12 items-center justify-center rounded-full border border-border bg-card">
+        <FileSearch className="size-5 text-muted-foreground" />
+      </div>
+      <h2 className="mt-5 font-serif text-2xl font-semibold">
+        내 논문에서 근거 있는 답을 찾아보세요
+      </h2>
+      <p className="mt-3 max-w-lg text-sm leading-6 text-muted-foreground">
+        PDF를 업로드하면 질문의 성격에 따라 텍스트 검색과 시각 분석을 선택하고, 답변의 출처 페이지를
+        함께 보여줍니다.
+      </p>
+    </div>
   );
 }
 
 function EmptyState({ onAsk }: { onAsk: (question: string) => void }) {
   return (
-    <div className="animate-fade-up flex flex-col items-center pt-6 text-center sm:pt-12">
-      <div className="flex size-12 items-center justify-center rounded-full border border-border bg-card">
-        <FlaskConical className="size-5 text-muted-foreground" />
-      </div>
-      <h2 className="mt-5 max-w-md font-serif text-2xl font-semibold leading-snug tracking-tight text-foreground sm:text-[1.7rem]">
-        Ask questions about{" "}
-        <span className="italic">“Attention Is All You Need”</span>.
-      </h2>
-      <p className="mt-3 max-w-md text-sm leading-6 text-muted-foreground">
-        The system adaptively decides whether visual reasoning is required, and
-        answers with cited pages from the paper.
+    <div className="animate-fade-up pt-2 text-center">
+      <h2 className="font-serif text-xl font-semibold">무엇이 궁금한가요?</h2>
+      <p className="mt-2 text-sm text-muted-foreground">
+        직접 질문하거나 아래 예시로 시작해 보세요.
       </p>
-
-      <div className="mt-8 grid w-full gap-2 sm:grid-cols-2">
-        {SUGGESTED_QUESTIONS.map((q) => (
+      <div className="mt-5 grid gap-2 sm:grid-cols-2">
+        {SUGGESTED_QUESTIONS.map((question) => (
           <button
-            key={q}
+            key={question}
             type="button"
-            onClick={() => onAsk(q)}
-            className="rounded-xl border border-border bg-card px-4 py-3 text-left text-sm leading-6 text-foreground transition-colors hover:border-ring/50 hover:bg-accent"
+            onClick={() => onAsk(question)}
+            className="rounded-xl border border-border bg-card px-4 py-3 text-left text-sm leading-6 hover:border-ring/50 hover:bg-accent"
           >
-            {q}
+            {question}
           </button>
         ))}
       </div>

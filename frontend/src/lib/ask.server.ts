@@ -9,17 +9,24 @@ const HEALTH_API_URL = `${BACKEND_BASE_URL}/health`;
 const REQUEST_TIMEOUT_MS = 180_000;
 const HEALTH_TIMEOUT_MS = 120_000;
 
-export async function askBackend(question: string): Promise<AskResult> {
+export async function askBackend(question: string, documentId: string): Promise<AskResult> {
   try {
     const res = await fetch(ASK_API_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question }),
+      body: JSON.stringify({ question, document_id: documentId }),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
 
     if (!res.ok) {
-      return { ok: false, status: res.status };
+      let detail: string | undefined;
+      try {
+        const body = (await res.json()) as { detail?: unknown };
+        if (typeof body.detail === "string") detail = body.detail;
+      } catch {
+        // Keep upstream implementation details out of the browser response.
+      }
+      return detail ? { ok: false, status: res.status, detail } : { ok: false, status: res.status };
     }
 
     const data = (await res.json()) as AskResponse;

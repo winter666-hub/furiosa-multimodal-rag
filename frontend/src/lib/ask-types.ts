@@ -5,6 +5,7 @@ export interface AskSource {
 
 export interface AskResponse {
   question: string;
+  document_id?: string;
   answer: string;
   route: string;
   routing_reason?: string;
@@ -19,5 +20,12 @@ export interface AskResponse {
 }
 
 export type AskResult =
-  | { ok: true; data: AskResponse }
-  | { ok: false; status: number | null };
+  { ok: true; data: AskResponse } | { ok: false; status: number | null; detail?: string };
+
+export interface CurrentDocument {
+  documentId: string;
+  filename: string;
+  pages: number;
+  status: "ready";
+  cacheHit?: boolean;
+}
