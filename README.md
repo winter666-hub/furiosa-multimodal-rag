@@ -1,7 +1,20 @@
 # Furiosa NPU Multimodal RAG Agent
 
-PRD의 컴포넌트를 교체 가능한 계층으로 나눈 Python 프로젝트입니다. 현재 단계에서는
-Furiosa-LLM의 OpenAI 호환 API 연결 진단을 구현합니다.
+연구 논문 PDF를 업로드하고 질문한 뒤, Adaptive routing과 retrieval/reranking을 거쳐
+근거 페이지까지 확인할 수 있는 범용 Paper RAG 프로젝트입니다. 기존
+`Attention Is All You Need` 문서는 배포 데모의 example document로도 사용할 수 있습니다.
+
+```text
+Upload a research paper PDF
+→ Ask questions with its document_id
+→ Adaptive routing
+→ Retrieval + reranking
+→ RAG answer
+→ Inspect one-based source pages
+```
+
+Render의 `hosted_only` web mode에서는 Direct NPU Vision을 호출하지 않으며,
+`VISUAL_REQUIRED` 질문도 routing 결과를 보존한 채 해당 문서의 Text RAG로 fallback합니다.
 
 ## 현재 구조
 

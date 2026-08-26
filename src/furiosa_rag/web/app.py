@@ -12,11 +12,12 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import urlopen
 
-from fastapi import Depends, FastAPI, HTTPException, Response
+from fastapi import Depends, FastAPI, File, HTTPException, Response, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from furiosa_rag.cache import DocumentEmbeddingCache
 from furiosa_rag.clients import FuriosaApiError, FuriosaClient
 from furiosa_rag.config import ModelEndpoint, Settings
 from furiosa_rag.embedding import FuriosaEmbedding
@@ -26,10 +27,18 @@ from furiosa_rag.pdf_images import PdfPageRenderer
 from furiosa_rag.pipeline import TextRagPipeline
 from furiosa_rag.reranker import FuriosaReranker
 from furiosa_rag.router import AdaptiveQueryRouter, LLMQueryRouter, QueryRoute, QueryRouter
+from furiosa_rag.web.documents import (
+    DocumentNotFoundError,
+    DocumentStore,
+    DocumentTooLargeError,
+    DocumentValidationError,
+    RegisteredDocument,
+)
 
 
 class AskRequest(BaseModel):
     question: str = Field(min_length=1, max_length=4000)
+    document_id: str | None = None
 
     @field_validator("question")
     @classmethod
@@ -49,6 +58,7 @@ class AskResponse(BaseModel):
     model_config = ConfigDict(protected_namespaces=())
 
     question: str
+    document_id: str | None = None
     answer: str
     route: str
     routing_reason: str
@@ -57,6 +67,14 @@ class AskResponse(BaseModel):
     fallback_used: bool
     sources: list[SourceResponse]
     latency_ms: dict[str, float]
+
+
+class DocumentResponse(BaseModel):
+    document_id: str
+    filename: str
+    pages: int
+    status: str
+    cache_hit: bool | None = None
 
 
 def parse_allowed_origins(value: str | None) -> list[str]:
@@ -134,6 +152,52 @@ def render_page_png(pdf_path: str, page_number: int) -> bytes:
     return PdfPageRenderer(dpi=120.0).render_png(pdf_path, page_number)
 
 
+def _max_upload_bytes() -> int:
+    try:
+        megabytes = int(os.getenv("MAX_PDF_UPLOAD_MB", "25"))
+    except ValueError as exc:
+        raise RuntimeError("MAX_PDF_UPLOAD_MB must be an integer") from exc
+    if megabytes <= 0:
+        raise RuntimeError("MAX_PDF_UPLOAD_MB must be greater than zero")
+    return megabytes * 1024 * 1024
+
+
+@lru_cache(maxsize=1)
+def get_document_store() -> DocumentStore:
+    root = os.getenv("DOCUMENT_STORAGE_ROOT", "/tmp/furiosa-rag/documents")
+    return DocumentStore(root, max_upload_bytes=_max_upload_bytes())
+
+
+class DocumentPipelineFactory:
+    def __init__(
+        self,
+        embedding: FuriosaEmbedding,
+        reranker: FuriosaReranker,
+        llm: FuriosaLlm,
+    ) -> None:
+        self.embedding = embedding
+        self.reranker = reranker
+        self.llm = llm
+
+    def create(self, document: RegisteredDocument) -> TextRagPipeline:
+        return TextRagPipeline(
+            self.embedding,
+            self.reranker,
+            self.llm,
+            cache=DocumentEmbeddingCache(document.cache_dir),
+        )
+
+    def prepare(self, document: RegisteredDocument) -> None:
+        if document.cache_hit:
+            return
+        pipeline = self.create(document)
+        pipeline._retrieve(  # Reuse the existing extraction/chunking/embedding cache path.
+            document.pdf_path,
+            "document indexing",
+            rebuild_cache=False,
+        )
+
+
 class HostedOnlyRagService:
     """Apply deployment policy without changing research routers or pipelines."""
 
@@ -142,14 +206,35 @@ class HostedOnlyRagService:
         router: QueryRouter,
         text_pipeline: TextRagPipeline,
         pdf_path: str | Path,
+        *,
+        document_store: DocumentStore | None = None,
+        pipeline_factory: DocumentPipelineFactory | None = None,
     ) -> None:
         self.router = router
         self.text_pipeline = text_pipeline
         self.pdf_path = Path(pdf_path) if str(pdf_path).strip() else None
+        self.document_store = document_store
+        self.pipeline_factory = pipeline_factory
 
-    def ask(self, question: str) -> AskResponse:
-        if self.pdf_path is None or not self.pdf_path.is_file():
-            raise FileNotFoundError("configured demo PDF is unavailable")
+    def ask(self, question: str, document_id: str | None = None) -> AskResponse:
+        active_document: RegisteredDocument | None = None
+        if document_id is not None:
+            if self.document_store is None or self.pipeline_factory is None:
+                raise DocumentNotFoundError("document not found")
+            record = self.document_store.get(document_id)
+            active_document = RegisteredDocument(
+                record,
+                self.document_store.pdf_path(document_id),
+                self.document_store.cache_dir(document_id),
+                cache_hit=True,
+            )
+            pipeline = self.pipeline_factory.create(active_document)
+            pdf_path = active_document.pdf_path
+        else:
+            if self.pdf_path is None or not self.pdf_path.is_file():
+                raise FileNotFoundError("configured demo PDF is unavailable")
+            pipeline = self.text_pipeline
+            pdf_path = self.pdf_path
 
         total_started = time.perf_counter_ns()
         routing_started = time.perf_counter_ns()
@@ -157,7 +242,7 @@ class HostedOnlyRagService:
         routing_latency = (time.perf_counter_ns() - routing_started) / 1_000_000
 
         # hosted_only intentionally uses Text RAG even when visual evidence was requested.
-        result: RagAnswer = self.text_pipeline.answer(self.pdf_path, question)
+        result: RagAnswer = pipeline.answer(pdf_path, question)
         total_latency = (time.perf_counter_ns() - total_started) / 1_000_000
         latency = {
             key: float(value)
@@ -169,6 +254,7 @@ class HostedOnlyRagService:
         fallback_used = decision.route is QueryRoute.VISUAL_REQUIRED
         return AskResponse(
             question=question,
+            document_id=document_id,
             answer=result.answer,
             route=decision.route.value,
             routing_reason=decision.reason,
@@ -185,6 +271,11 @@ class HostedOnlyRagService:
             latency_ms=latency,
         )
 
+    def prepare_document(self, document: RegisteredDocument) -> None:
+        if self.pipeline_factory is None:
+            raise RuntimeError("uploaded document pipeline is unavailable")
+        self.pipeline_factory.prepare(document)
+
 
 @lru_cache(maxsize=1)
 def get_service() -> HostedOnlyRagService:
@@ -195,13 +286,21 @@ def get_service() -> HostedOnlyRagService:
     pdf_path = get_demo_pdf_path()
     client = FuriosaClient(settings.api_key, settings.request_timeout)
     llm = FuriosaLlm(_endpoint(settings, "llm"), client)
+    embedding = FuriosaEmbedding(_endpoint(settings, "embedding"), client)
+    reranker = FuriosaReranker(_endpoint(settings, "reranker"), client)
     router = AdaptiveQueryRouter(LLMQueryRouter(_endpoint(settings, "llm"), client))
     pipeline = TextRagPipeline(
-        FuriosaEmbedding(_endpoint(settings, "embedding"), client),
-        FuriosaReranker(_endpoint(settings, "reranker"), client),
+        embedding,
+        reranker,
         llm,
     )
-    return HostedOnlyRagService(router, pipeline, pdf_path or "")
+    return HostedOnlyRagService(
+        router,
+        pipeline,
+        pdf_path or "",
+        document_store=get_document_store(),
+        pipeline_factory=DocumentPipelineFactory(embedding, reranker, llm),
+    )
 
 
 app = FastAPI(title="Furiosa Multimodal RAG", version="0.1.0")
@@ -218,6 +317,80 @@ app.add_middleware(
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.post("/documents", response_model=DocumentResponse)
+async def upload_document(
+    file: Annotated[UploadFile, File()],
+    service: Annotated[HostedOnlyRagService, Depends(get_service)],
+) -> DocumentResponse:
+    if service.document_store is None:
+        raise HTTPException(status_code=503, detail="document storage unavailable")
+    try:
+        document = await service.document_store.register(file)
+        await run_in_threadpool(service.prepare_document, document)
+    except DocumentTooLargeError as exc:
+        raise HTTPException(status_code=413, detail="PDF upload is too large") from exc
+    except DocumentValidationError as exc:
+        raise HTTPException(status_code=400, detail="invalid PDF") from exc
+    except FuriosaApiError as exc:
+        raise HTTPException(status_code=502, detail="upstream model service unavailable") from exc
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=500, detail="document processing failed") from exc
+    return DocumentResponse(
+        document_id=document.record.document_id,
+        filename=document.record.filename,
+        pages=document.record.pages,
+        status=document.record.status,
+        cache_hit=document.cache_hit,
+    )
+
+
+@app.get(
+    "/documents/{document_id}",
+    response_model=DocumentResponse,
+    response_model_exclude_none=True,
+)
+def document_metadata(
+    document_id: str,
+    store: Annotated[DocumentStore, Depends(get_document_store)],
+) -> DocumentResponse:
+    try:
+        record = store.get(document_id)
+    except DocumentNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="document not found") from exc
+    return DocumentResponse(
+        document_id=record.document_id,
+        filename=record.filename,
+        pages=record.pages,
+        status=record.status,
+    )
+
+
+@app.get("/documents/{document_id}/pages/{page_number}", response_class=Response)
+async def uploaded_document_page(
+    document_id: str,
+    page_number: int,
+    store: Annotated[DocumentStore, Depends(get_document_store)],
+) -> Response:
+    if page_number <= 0:
+        raise HTTPException(status_code=422, detail="page_number must be greater than zero")
+    try:
+        store.get(document_id)
+        pdf_path = store.pdf_path(document_id)
+    except DocumentNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="document not found") from exc
+    try:
+        content = await run_in_threadpool(render_page_png, str(pdf_path), page_number)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="document page not found") from exc
+    except (FileNotFoundError, OSError, RuntimeError) as exc:
+        raise HTTPException(status_code=500, detail="page preview unavailable") from exc
+    return Response(
+        content=content,
+        media_type="image/png",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
 
 
 @app.get("/document/page/{page_number}", response_class=Response)
@@ -244,13 +417,15 @@ async def document_page(
     )
 
 
-@app.post("/ask", response_model=AskResponse)
+@app.post("/ask", response_model=AskResponse, response_model_exclude_none=True)
 async def ask(
     request: AskRequest,
     service: Annotated[HostedOnlyRagService, Depends(get_service)],
 ) -> AskResponse:
     try:
-        return await run_in_threadpool(service.ask, request.question)
+        return await run_in_threadpool(service.ask, request.question, request.document_id)
+    except DocumentNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="document not found") from exc
     except FileNotFoundError as exc:
         raise HTTPException(status_code=503, detail="demo document unavailable") from exc
     except FuriosaApiError as exc:
