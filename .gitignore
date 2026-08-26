@@ -35,3 +35,13 @@ vl_test.py
 # Benchmark runtime outputs
 benchmarks/*_results.csv
 benchmarks/e2e_smoke.jsonl
+
+# Frontend dependencies / build outputs
+frontend/node_modules/
+frontend/.output/
+frontend/.wrangler/
+frontend/dist/
+node_modules/
+.output/
+.wrangler/
+dist/
