@@ -1,177 +1,254 @@
-# Furiosa NPU Multimodal RAG Agent
+# Furiosa Agentic Paper RAG
 
-연구 논문 PDF를 업로드하고 질문한 뒤, Adaptive routing과 retrieval/reranking을 거쳐
-근거 페이지까지 확인할 수 있는 범용 Paper RAG 프로젝트입니다. 기존
-`Attention Is All You Need` 문서는 배포 데모의 example document로도 사용할 수 있습니다.
+A selective multimodal Paper RAG system that accepts a research paper PDF, retrieves evidence,
+selects visual reasoning only when needed, and returns an answer with verifiable source pages.
+
+[Live Demo](https://winter666-hub-furiosa-multimodal-rag-frontend.winter666.workers.dev) ·
+[Backend](https://furiosa-multimodal-rag.onrender.com) ·
+[GitHub](https://github.com/winter666-hub/furiosa-multimodal-rag)
+
+## Project Overview
+
+Research papers mix prose with figures, tables, and architecture diagrams. A text-only RAG
+pipeline is efficient for many questions, but it can miss evidence that is primarily visual. At
+the same time, sending every question to a vision model adds avoidable latency and inference cost.
+
+This project places an adaptive router before answer generation. It classifies each question as
+`TEXT_ONLY` or `VISUAL_REQUIRED`, then uses the least expensive suitable path. Text questions use
+retrieval and reranking directly; visual questions can use a vision path in the research setup.
+
+The public Cloudflare + Render demo runs in `hosted_only` mode: it reports the router decision, but
+`VISUAL_REQUIRED` requests use text-RAG fallback because Direct NPU Vision is not enabled.
+
+## Problem
+
+Papers contain evidence in prose, tables, figures, and diagrams, but many factual questions remain
+fully answerable through text retrieval. Running multimodal inference for every question therefore
+wastes compute, while never using it misses visual evidence. The research question is whether
+selective routing can reduce vision calls and latency while preserving routing and answer quality.
+
+## Proposed Approach
 
 ```text
-Upload a research paper PDF
-→ Ask questions with its document_id
-→ Adaptive routing
-→ Retrieval + reranking
-→ RAG answer
-→ Inspect one-based source pages
+Question
+  -> Adaptive Router
+  -> TEXT_ONLY / VISUAL_REQUIRED
+  -> Retrieval
+  -> Reranking
+  -> Relevant evidence
+  -> Final answer generation
+  -> Source page verification
 ```
 
-Render의 `hosted_only` web mode에서는 Direct NPU Vision을 호출하지 않으며,
-`VISUAL_REQUIRED` 질문도 routing 결과를 보존한 채 해당 문서의 Text RAG로 fallback합니다.
-
-## 현재 구조
+Document preparation is isolated per uploaded PDF:
 
 ```text
-app/                         # 향후 UI/API entrypoint
-data/                        # 업로드 문서와 로컬 벡터 저장소(버전 관리 제외)
-src/furiosa_rag/
-  clients/                   # 공통 HTTP/오류 처리
-  cli/                       # 운영/개발 명령
-  config.py                  # 환경변수 설정
-  llm.py                     # LLM 인터페이스와 Furiosa Chat API
-  embedding.py               # Embedding 인터페이스와 Furiosa API
-  reranker.py                # Reranker 인터페이스와 Furiosa API
-  providers/interfaces.py    # OCR/검색/번역/문서 파싱 provider 규약
-tests/                       # 네트워크 없이 실행되는 단위 테스트
+PDF upload
+  -> Text extraction
+  -> Chunking
+  -> Embedding
+  -> Document-specific cache
+  -> Question answering
 ```
 
-`providers/interfaces.py`에는 향후 외부 OCR, 검색, 번역, 문서 파싱 서비스를 연결하기 위한
-`Protocol`과 provider-neutral 결과 타입만 정의되어 있습니다. 현재 외부 API 구현, SDK,
-API key 또는 네트워크 호출은 포함하지 않습니다. 새 provider는 해당 인터페이스를 구현하고
-파이프라인 조립 단계에서 주입합니다.
+## Architecture
 
-## 연결 확인
+```mermaid
+flowchart TD
+    U[User] --> CF[Cloudflare Workers Frontend]
+    CF --> API[Render FastAPI Backend]
+    API --> DM[Document Manager]
+    DM --> AR[Adaptive Router]
+    AR -->|TEXT_ONLY| TR[Embedding + Retrieval + Reranking]
+    AR -->|VISUAL_REQUIRED| VR[Visual Route]
+    VR -. Research / local Direct NPU .-> VN[Qwen3-VL]
+    VR -. Public hosted-only mode .-> FB[Text-RAG Fallback]
+    TR --> LLM[Final LLM]
+    VN --> LLM
+    FB --> LLM
+    LLM --> OUT[Answer + Source Pages]
+```
 
-### 1. SSH 터널 열기 (Git Bash)
+The dashed branches distinguish two environments: Direct NPU Vision is part of the research and
+local evaluation path, while the public demo deliberately uses hosted text fallback.
 
-NPU 서버가 SSH 키 파일을 통해서만 접근 가능하다면 먼저 로컬 포트 포워딩을 엽니다.
-키 파일과 실제 접속 정보는 Git에 커밋하지 않습니다.
+RAG has four roles here: **retrieval** finds relevant PDF chunks, **augmentation** gives those
+chunks to the final LLM, **generation** produces an evidence-bound answer, and **verification**
+returns chunk IDs and one-based source pages.
+
+## Furiosa Integration
+
+The hosted text pipeline uses Furiosa-compatible model endpoints:
+
+- `furiosa-ai/Qwen3-Embedding-8B` for document and query embeddings
+- `furiosa-ai/Qwen3-Reranker-8B` for passage reranking
+- `furiosa-ai/Qwen3-32B-FP8` for routing fallback and final answer generation
+
+The research/local visual path uses `furiosa-ai/Qwen3-VL-32B-Instruct` through a Direct NPU
+endpoint. “Hosted API” and “Direct NPU” are separate deployment paths; the public demo does not
+claim to run Direct NPU Vision.
+
+## Key Features
+
+- Arbitrary PDF upload, SHA-256 IDs, path-safe isolation, and duplicate cache reuse
+- Retrieval, reranking, adaptive routing, and evidence-grounded generation
+- Source-page buttons, rendered previews, and PDF replacement
+- Process-local rate/concurrency limits and bounded TTL/storage cleanup
+- Trusted Cloudflare-to-Render client-IP forwarding with a shared proxy secret
+
+## Research Results
+
+The checked-in 15-question E2E evaluation compares always-on vision with adaptive routing. The
+dataset contains five text, five explicit-visual, and five implicit-visual questions.
+
+| Metric | Always Vision | Adaptive | Change |
+|---|---:|---:|---:|
+| Vision calls | 15 | 9 | -40.0% |
+| Average E2E latency | 13.053 s | 10.479 s | -19.7% |
+| Text-query latency | 14.076 s | 6.560 s | -53.4% |
+
+Sources: [`benchmarks/e2e_always_vision_results.csv`](benchmarks/e2e_always_vision_results.csv) and
+[`benchmarks/e2e_adaptive_results.csv`](benchmarks/e2e_adaptive_results.csv).
+
+On the same E2E set, adaptive routing produced:
+
+| Routing metric | Result |
+|---|---:|
+| Correct routes | 14 / 15 |
+| Accuracy | 93.3% |
+| Visual recall | 90.0% |
+| Visual precision | 100.0% |
+
+The only false negative was the implicit-visual question `E_A02`. Its answer-quality scores were
+10 for Always Vision and 7 for both pure LLM routing and Adaptive routing. This connects a routing
+miss to a measurable downstream quality loss and identifies implicit visual intent as the main
+remaining research problem.
+
+The answer-quality artifact is preliminary rather than a completed 15/15 evaluation: the CSV has
+45 strategy-question rows, with 44 successful judge results and one recorded judge parsing error.
+Source: [`benchmarks/answer_quality_results.csv`](benchmarks/answer_quality_results.csv).
+
+## Router-Only Benchmark
+
+The separate 60-question holdout measures routing overhead independently from retrieval and answer
+generation:
+
+| Router | Average routing latency |
+|---|---:|
+| Pure LLM | 281.34 ms |
+| Adaptive | 135.97 ms |
+| Reduction | 51.67% |
+
+Sources: [`benchmarks/router_llm_holdout_results.csv`](benchmarks/router_llm_holdout_results.csv)
+and [`benchmarks/router_adaptive_holdout_results.csv`](benchmarks/router_adaptive_holdout_results.csv).
+These router-only numbers are intentionally kept separate from the E2E latency table.
+
+## Public Demo Usage
+
+1. Open the [live demo](https://winter666-hub-furiosa-multimodal-rag-frontend.winter666.workers.dev).
+2. Upload a PDF and wait for the document-ready state.
+3. Ask a question about the paper.
+4. Review the answer, route, and fallback indicators.
+5. Click a source `Page` button.
+6. Compare the answer with the rendered original page.
+
+Example questions:
+
+- “Summarize the paper's three main contributions.”
+- “Explain the paper's main methodology.”
+- “What do the experimental setup and key results show?”
+- “What are the limitations of this paper?”
+
+## Tech Stack
+
+| Area | Technologies |
+|---|---|
+| Frontend | TanStack Start, React, TypeScript, Cloudflare Workers |
+| Backend | FastAPI, Python, PyMuPDF, NumPy |
+| AI | Furiosa Hosted API, Qwen3 Embedding, Reranker, LLM, Qwen3-VL research route |
+| Evaluation | pytest, custom routing benchmark, E2E benchmark, answer-quality judge |
+
+## Repository Structure
+
+```text
+furiosa-multimodal-rag/
+├── frontend/                  # TanStack Start UI and Cloudflare server routes
+├── src/furiosa_rag/
+│   ├── web/                   # FastAPI app, document store, abuse controls
+│   ├── clients/               # Furiosa-compatible HTTP client
+│   ├── cli/                   # Diagnostics and benchmark commands
+│   ├── pipeline.py            # Text and multimodal RAG orchestration
+│   ├── router.py              # Rule, LLM, and adaptive routers
+│   └── retrieval.py           # Vector retrieval
+├── tests/                     # Deterministic unit and web tests
+├── benchmarks/                # Evaluation sets and checked-in result CSVs
+├── DEPLOY_RENDER.md           # Backend deployment and hardening details
+├── pyproject.toml
+└── README.md
+```
+
+## Local Development
 
 ```bash
-cp .ssh-tunnel.example .ssh-tunnel.env
-# .ssh-tunnel.env에서 SSH_KEY, SSH_USER, SSH_HOST와 원격 포트를 수정
-bash scripts/start_ssh_tunnel.sh
-```
-
-이 터미널은 연결 테스트와 앱 실행 중 계속 열어 둡니다. 스크립트는 기본적으로 NPU 서버의
-`8000~8003`을 Windows PC의 `127.0.0.1:8000~8003`으로 전달합니다. 서버에서 네 모델이
-다른 포트를 사용하면 `.ssh-tunnel.env`의 `REMOTE_*_PORT`만 변경하면 됩니다.
-Vision이 단독으로 원격 8000에서 실행되는 현재 테스트 구성이라면 `ENABLE_LLM=false`,
-`ENABLE_EMBEDDING=false`, `ENABLE_RERANKER=false`, `LOCAL_VISION_PORT=8000`,
-`REMOTE_VISION_PORT=8000`으로 설정하고 `FURIOSA_VISION_BASE_URL=http://localhost:8000/v1`을
-사용할 수 있습니다. 애플리케이션의 endpoint 기준값은 포트가 아니라 `.env` 설정입니다.
-
-직접 명령을 사용할 경우 LLM 한 개에 대한 최소 명령은 다음과 같습니다.
-
-```bash
-ssh -i /c/path/to/npu.pem -N -L 8000:127.0.0.1:8000 ubuntu@npu.example.com
-```
-
-### 2. Python 연결 진단
-
-1. `.env.example`을 `.env`로 복사하고 실제 서버 주소와 모델 ID를 입력합니다.
-2. 개발 모드로 설치하고 진단 명령을 실행합니다.
-
-```powershell
-Copy-Item .env.example .env
-python -m pip install -e ".[dev]"
-furiosa-check
-```
-
-설치하지 않고도 실행할 수 있습니다.
-
-```powershell
-$env:PYTHONPATH = "src"
-python -m furiosa_rag.cli.check_connection
-```
-
-`/v1/models` 연결 확인에 성공하면 실제 Text RAG API에 각각 한 번씩 최소 추론 요청을
-보냅니다. Embedding → Reranker → LLM 순서이며 Vision API는 아직 호출하지 않습니다.
-
-```powershell
-$env:PYTHONPATH = "src"
-python -m furiosa_rag.cli.smoke_test
-```
-
-Git Bash에서는 다음과 같이 실행할 수 있습니다.
-
-```bash
-PYTHONPATH=src python -m furiosa_rag.cli.smoke_test
-```
-
-성공 시 `Inference smoke test: 3/3 APIs passed`가 출력됩니다. 실패 시 API URL, HTTP 상태
-또는 timeout 원인이 출력되고 종료 코드 `1`을 반환합니다.
-
-명령은 LLM, Vision, Embedding, Reranker 서버 각각의 `GET /v1/models`를 호출해 HTTP
-상태, latency, 서버가 보고한 모델 ID를 출력합니다. 하나라도 실패하면 종료 코드 `1`을
-반환합니다. `.env`는 외부 패키지 없이 자동으로 읽으며 이미 설정된 환경변수를 덮어쓰지
-않습니다.
-
-단일 서버만 먼저 확인하려면 나머지 URL을 비워둘 수 있습니다.
-
-```dotenv
-FURIOSA_LLM_BASE_URL=http://npu-server:8000/v1
-FURIOSA_VISION_BASE_URL=
-FURIOSA_EMBEDDING_BASE_URL=
-FURIOSA_RERANKER_BASE_URL=
-```
-
-## Public demo deployment safety
-
-The hosted demo applies process-local IP rate limits to PDF uploads and
-questions, limits concurrent model work, and rejects PDFs above 25 MB. Uploaded
-document directories are bounded by a six-hour TTL, a 20-document count cap,
-and a 500 MB aggregate storage cap by default. Cleanup protects documents that
-are currently being indexed or queried.
-
-These are minimum safeguards for a single Render demo instance, not distributed
-production security. The limiter state resets on restart, and Render's local
-filesystem is ephemeral. Multi-instance or higher-volume deployments should use
-Cloudflare Rate Limiting, Durable Objects, Redis, or another shared limiter and
-durable object storage. See `DEPLOY_RENDER.md` for all configuration variables.
-
-The Cloudflare Worker and Render service must share the same server-side
-`PAPER_RAG_PROXY_SECRET`. This allows Render to trust the Worker's
-`CF-Connecting-IP` forwarding without trusting spoofable client headers. The
-proxy secret is independent of `FURIOSA_API_KEY`; neither value belongs in the
-browser bundle or repository.
-
-## 테스트
-
-```powershell
+python -m venv .venv
+# Windows: .venv\Scripts\activate
 python -m pip install -r requirements.txt
 python -m pytest
 ```
 
-## Document embedding cache
+Copy `.env.example` to `.env` and provide only the endpoints you intend to use. Diagnostic commands
+are available as `python -m furiosa_rag.cli.check_connection` and
+`python -m furiosa_rag.cli.smoke_test`.
 
-Text RAG 실행 시 PDF hash, chunk 설정, embedding 모델 ID가 같은 캐시를
-`data/cache/embeddings/`에서 자동으로 재사용합니다. 강제로 다시 생성하려면
-`--rebuild-cache`를 추가합니다.
-
-```powershell
-$env:PYTHONPATH = "src"
-python -m furiosa_rag.cli.run_rag "data/attention_is_all_you_need.pdf" "Why do the authors use multi-head attention?" --rebuild-cache
+```bash
+cd frontend
+bun install
+bun run dev
 ```
 
-멀티모달 경로는 reranking 결과의 최상위 페이지 하나만 렌더링하고 Vision에 전달하며,
-Vision 호출 실패 시 같은 검색 결과를 사용한 Text RAG로 자동 fallback합니다.
-Vision 응답 길이는 `FURIOSA_VISION_MAX_TOKENS`로 조절하며 기본값은 `256`입니다.
+## Deployment
 
-```powershell
-python -m furiosa_rag.cli.run_multimodal_rag "data/attention_is_all_you_need.pdf" "Figure 1에서 Encoder와 Decoder의 차이는?" --top-k 3 --top-n 3
-```
+- **Frontend:** Cloudflare Workers
+- **Backend:** Render
+- **Hosted inference:** Furiosa Hosted API
 
-일회성 benchmark에서는 `--vision-max-tokens 128`처럼 환경설정을 덮어쓸 수 있습니다.
+The frontend and backend must share a server-side `PAPER_RAG_PROXY_SECRET`; it is distinct from
+`FURIOSA_API_KEY` and must not enter the browser bundle. See [DEPLOY_RENDER.md](DEPLOY_RENDER.md)
+for environment variables, start commands, health checks, upload behavior, and proxy details.
 
-Top-k별 latency 비교 결과는 다음 명령으로 CSV에 저장할 수 있습니다.
+The public demo includes process-local IP rate limits, upload/ask concurrency caps, a 25 MB PDF
+limit, `MAX_DOCUMENTS`, `DOCUMENT_TTL_HOURS`, and `MAX_DOCUMENT_STORAGE_MB`. Cloudflare forwards
+its verified client address to Render only with the shared proxy token; untrusted forwarded-IP
+headers are ignored.
 
-```powershell
-python -m furiosa_rag.cli.benchmark "data/attention_is_all_you_need.pdf" "Why do the authors use multi-head attention?" --top-k 3 5 10 20 --top-n 3 --output "data/benchmarks/attention_top_k.csv"
-```
+These controls are appropriate for the current single-instance demo. They are not a distributed,
+production-grade security layer.
 
-## Router benchmark
+## Limitations
 
-The deterministic rule router can be evaluated without Furiosa APIs, vision models, or an NPU:
+- The public demo is hosted-only; Direct NPU Vision is not active.
+- `VISUAL_REQUIRED` requests use text-RAG fallback in the public deployment.
+- Render storage is ephemeral, so uploaded PDFs can disappear after restart or redeployment.
+- Rate limits, concurrency state, and active-document tracking are process-local.
+- The UI maintains one active document session at a time.
+- The current benchmark is small and based on one paper-oriented evaluation set.
+- Implicit visual questions remain the hardest routing cases.
 
-```powershell
-$env:PYTHONPATH = "src"
-python -m furiosa_rag.cli.benchmark_router benchmarks/router_eval.jsonl --output benchmarks/router_results.csv
-```
+## Future Work
+
+- Durable storage and distributed rate limiting
+- A public Direct-NPU visual path and better implicit-visual routing
+- Larger multi-domain benchmarks, multi-document RAG, and asynchronous indexing
+
+## Security
+
+`.env`, SSH/private keys, uploaded PDFs, runtime caches, benchmark outputs, and frontend builds are
+ignored. Keep Furiosa keys and proxy secrets in deployment stores; never commit user documents.
+
+## Tests
+
+Verified status: **132 backend tests passed**, **Ruff passed**, and the **frontend production build
+succeeded**.
+
+The repository has historical frontend-wide CRLF/Prettier lint noise, so this README does not claim
+a clean full-project frontend lint run.

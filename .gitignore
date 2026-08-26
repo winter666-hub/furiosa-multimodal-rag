@@ -45,3 +45,5 @@ node_modules/
 .output/
 .wrangler/
 dist/
+
+.pytest_tmp/
