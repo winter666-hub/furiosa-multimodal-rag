@@ -107,8 +107,7 @@ dataset contains five text, five explicit-visual, and five implicit-visual quest
 | Average E2E latency | 13.053 s | 10.479 s | -19.7% |
 | Text-query latency | 14.076 s | 6.560 s | -53.4% |
 
-Sources: [`benchmarks/e2e_always_vision_results.csv`](benchmarks/e2e_always_vision_results.csv) and
-[`benchmarks/e2e_adaptive_results.csv`](benchmarks/e2e_adaptive_results.csv).
+Full methodology and checked-in result tables: [Benchmark Report](benchmarks/README.md).
 
 On the same E2E set, adaptive routing produced:
 
@@ -126,7 +125,7 @@ remaining research problem.
 
 The answer-quality artifact is preliminary rather than a completed 15/15 evaluation: the CSV has
 45 strategy-question rows, with 44 successful judge results and one recorded judge parsing error.
-Source: [`benchmarks/answer_quality_results.csv`](benchmarks/answer_quality_results.csv).
+See the [Benchmark Report](benchmarks/README.md) for the preliminary strategy aggregates.
 
 ## Router-Only Benchmark
 
@@ -139,9 +138,8 @@ generation:
 | Adaptive | 135.97 ms |
 | Reduction | 51.67% |
 
-Sources: [`benchmarks/router_llm_holdout_results.csv`](benchmarks/router_llm_holdout_results.csv)
-and [`benchmarks/router_adaptive_holdout_results.csv`](benchmarks/router_adaptive_holdout_results.csv).
-These router-only numbers are intentionally kept separate from the E2E latency table.
+The [Benchmark Report](benchmarks/README.md) records the full holdout table. These router-only
+numbers are intentionally kept separate from the E2E latency table.
 
 ## Public Demo Usage
 
