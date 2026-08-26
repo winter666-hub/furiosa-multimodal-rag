@@ -1,0 +1,332 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Design system — "Academic paper" research demo.
+ * Warm paper background, ink text, serif display, mono data accents.
+ */
+
+@theme {
+  --font-sans: "Source Sans 3", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-ring-offset-background: var(--background);
+  --color-highlight: var(--highlight);
+  --color-highlight-foreground: var(--highlight-foreground);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+:root {
+  --radius: 0.5rem;
+  --background: oklch(0.978 0.004 95);
+  --foreground: oklch(0.258 0.018 262);
+  --card: oklch(0.995 0.002 95);
+  --card-foreground: oklch(0.258 0.018 262);
+  --popover: oklch(0.995 0.002 95);
+  --popover-foreground: oklch(0.258 0.018 262);
+  --primary: oklch(0.3 0.038 262);
+  --primary-foreground: oklch(0.97 0.004 95);
+  --secondary: oklch(0.946 0.006 95);
+  --secondary-foreground: oklch(0.3 0.038 262);
+  --muted: oklch(0.952 0.006 95);
+  --muted-foreground: oklch(0.512 0.02 262);
+  --accent: oklch(0.94 0.01 90);
+  --accent-foreground: oklch(0.3 0.038 262);
+  --destructive: oklch(0.577 0.215 27.325);
+  --destructive-foreground: oklch(0.97 0.004 95);
+  --border: oklch(0.897 0.008 90);
+  --input: oklch(0.885 0.009 90);
+  --ring: oklch(0.55 0.045 262);
+  --highlight: oklch(0.82 0.105 82);
+  --highlight-foreground: oklch(0.45 0.085 72);
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+  --sidebar: oklch(0.97 0.004 95);
+  --sidebar-foreground: oklch(0.258 0.018 262);
+  --sidebar-primary: oklch(0.3 0.038 262);
+  --sidebar-primary-foreground: oklch(0.97 0.004 95);
+  --sidebar-accent: oklch(0.946 0.006 95);
+  --sidebar-accent-foreground: oklch(0.3 0.038 262);
+  --sidebar-border: oklch(0.897 0.008 90);
+  --sidebar-ring: oklch(0.55 0.045 262);
+}
+
+.dark {
+  --background: oklch(0.19 0.014 262);
+  --foreground: oklch(0.94 0.005 95);
+  --card: oklch(0.235 0.016 262);
+  --card-foreground: oklch(0.94 0.005 95);
+  --popover: oklch(0.235 0.016 262);
+  --popover-foreground: oklch(0.94 0.005 95);
+  --primary: oklch(0.92 0.006 95);
+  --primary-foreground: oklch(0.24 0.016 262);
+  --secondary: oklch(0.285 0.018 262);
+  --secondary-foreground: oklch(0.94 0.005 95);
+  --muted: oklch(0.285 0.018 262);
+  --muted-foreground: oklch(0.7 0.02 262);
+  --accent: oklch(0.3 0.02 262);
+  --accent-foreground: oklch(0.94 0.005 95);
+  --destructive: oklch(0.704 0.191 22.216);
+  --destructive-foreground: oklch(0.97 0.004 95);
+  --border: oklch(1 0 0 / 12%);
+  --input: oklch(1 0 0 / 16%);
+  --ring: oklch(0.62 0.03 262);
+  --highlight: oklch(0.78 0.1 82);
+  --highlight-foreground: oklch(0.82 0.09 82);
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: oklch(0.235 0.016 262);
+  --sidebar-foreground: oklch(0.94 0.005 95);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.94 0.005 95);
+  --sidebar-accent: oklch(0.285 0.018 262);
+  --sidebar-accent-foreground: oklch(0.94 0.005 95);
+  --sidebar-border: oklch(1 0 0 / 12%);
+  --sidebar-ring: oklch(0.62 0.03 262);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection {
+    background-color: var(--highlight);
+    color: var(--highlight-foreground);
+  }
+}
+
+/* ------- Motion utilities ------- */
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes typing-dot {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.35;
+  }
+  30% {
+    transform: translateY(-3px);
+    opacity: 1;
+  }
+}
+
+@utility animate-fade-up {
+  animation: fade-up 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@utility animate-typing-dot {
+  animation: typing-dot 1.2s ease-in-out infinite;
+}
+
+/* ------- Markdown answer typography ------- */
+
+.answer-markdown {
+  font-size: 0.9375rem;
+  line-height: 1.75;
+}
+
+.answer-markdown p {
+  margin: 0.625rem 0;
+}
+
+.answer-markdown p:first-child {
+  margin-top: 0;
+}
+
+.answer-markdown p:last-child {
+  margin-bottom: 0;
+}
+
+.answer-markdown ul,
+.answer-markdown ol {
+  margin: 0.625rem 0;
+  padding-left: 1.375rem;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.answer-markdown ul {
+  list-style: disc;
+}
+
+.answer-markdown ol {
+  list-style: decimal;
+}
+
+.answer-markdown li::marker {
+  color: var(--muted-foreground);
+}
+
+.answer-markdown strong {
+  font-weight: 650;
+}
+
+.answer-markdown em {
+  font-style: italic;
+}
+
+.answer-markdown h1,
+.answer-markdown h2,
+.answer-markdown h3,
+.answer-markdown h4 {
+  font-family: var(--font-serif);
+  font-weight: 600;
+  margin: 1.1rem 0 0.4rem;
+  line-height: 1.35;
+}
+
+.answer-markdown h1 {
+  font-size: 1.25rem;
+}
+
+.answer-markdown h2 {
+  font-size: 1.15rem;
+}
+
+.answer-markdown h3,
+.answer-markdown h4 {
+  font-size: 1.02rem;
+}
+
+.answer-markdown :not(pre) > code {
+  font-family: var(--font-mono);
+  font-size: 0.82em;
+  background-color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 0.3rem;
+  padding: 0.1rem 0.35rem;
+  white-space: break-spaces;
+}
+
+.answer-markdown pre {
+  margin: 0.75rem 0;
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background-color: var(--muted);
+  overflow-x: auto;
+}
+
+.answer-markdown pre code {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+
+.answer-markdown blockquote {
+  margin: 0.75rem 0;
+  border-left: 2px solid var(--border);
+  padding-left: 1rem;
+  color: var(--muted-foreground);
+  font-style: italic;
+}
+
+.answer-markdown a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  color: var(--primary);
+}
+
+.answer-markdown table {
+  margin: 0.75rem 0;
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.answer-markdown th,
+.answer-markdown td {
+  border: 1px solid var(--border);
+  padding: 0.4rem 0.75rem;
+  text-align: left;
+}
+
+.answer-markdown th {
+  background-color: var(--muted);
+  font-weight: 600;
+}
+
+.answer-markdown hr {
+  margin: 1rem 0;
+  border-color: var(--border);
+}
+
+.answer-markdown .katex-display {
+  margin: 0.875rem 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 0.15rem;
+}
+
+.answer-markdown .katex {
+  font-size: 1.02em;
+}
