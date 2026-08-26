@@ -155,7 +155,8 @@ numbers are intentionally kept separate from the E2E latency table.
 Answers do not expose internal chunk identifiers or application citation markers. The `Sources`
 controls show only page labels; opening one displays the cited PDF page and the actual retrieved
 passage used for grounding. When PyMuPDF can locate a stable text anchor, the matching PDF-space
-rectangle is overlaid responsively on the rendered page.
+rectangle is overlaid responsively on the rendered page. Source pages are rendered at higher
+resolution for easier inspection.
 
 Text-coordinate lookup is best-effort. Scanned or image-only pages, complex multi-column layouts,
 hyphenated text, formulas, and figure-only evidence may not produce a highlight. The page preview

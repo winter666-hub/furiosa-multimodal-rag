@@ -23,6 +23,35 @@ def test_pdf_renderer_renders_one_based_selected_page_to_png(tmp_path: Path) -> 
         renderer.render_png(pdf_path, 0)
 
 
+def test_default_page_rendering_is_two_times_pdf_dimensions(tmp_path: Path) -> None:
+    pdf_path = tmp_path / "two-times.pdf"
+    document = pymupdf.open()
+    document.new_page(width=200, height=300).insert_text((20, 30), "readable source text")
+    document.save(pdf_path)
+    document.close()
+
+    pixmap = pymupdf.Pixmap(PdfPageRenderer().render_png(pdf_path, 1))
+
+    assert (pixmap.width, pixmap.height) == (400, 600)
+
+
+def test_two_times_rendering_keeps_highlights_in_pdf_coordinates(tmp_path: Path) -> None:
+    pdf_path = tmp_path / "highlight-scale.pdf"
+    document = pymupdf.open()
+    document.new_page(width=200, height=300).insert_text((20, 30), "stable highlight text")
+    document.save(pdf_path)
+    document.close()
+
+    located = find_text_highlights(pdf_path, 1, "stable highlight text")
+    pixmap = pymupdf.Pixmap(PdfPageRenderer().render_png(pdf_path, 1))
+
+    assert (located.page_width, located.page_height) == (200.0, 300.0)
+    assert (pixmap.width, pixmap.height) == (400, 600)
+    assert located.rectangles
+    assert 0 < located.rectangles[0].x / located.page_width < 1
+    assert 0 < located.rectangles[0].y / located.page_height < 1
+
+
 def test_text_highlight_lookup_returns_pdf_space_rectangle(tmp_path: Path) -> None:
     pdf_path = tmp_path / "source.pdf"
     document = pymupdf.open()

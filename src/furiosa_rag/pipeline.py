@@ -48,7 +48,7 @@ class RagConfig:
     chunk_overlap: int = 100
     top_k: int = 10
     top_n: int = 3
-    answer_max_tokens: int = 768
+    answer_max_tokens: int = 1024
     vision_max_tokens: int = 256
     vision_dpi: float = 144.0
 

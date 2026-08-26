@@ -177,7 +177,7 @@ def get_demo_pdf_path() -> Path | None:
 @lru_cache(maxsize=8)
 def render_page_png(pdf_path: str, page_number: int) -> bytes:
     """Render and cache up to eight one-based source pages in memory."""
-    return PdfPageRenderer(dpi=120.0).render_png(pdf_path, page_number)
+    return PdfPageRenderer().render_png(pdf_path, page_number)
 
 
 def _max_upload_bytes() -> int:

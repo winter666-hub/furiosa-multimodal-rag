@@ -9,6 +9,10 @@ from pathlib import Path
 
 import pymupdf
 
+PDF_POINTS_PER_INCH = 72.0
+PDF_PAGE_RENDER_SCALE = 2.0
+PDF_PAGE_RENDER_DPI = PDF_POINTS_PER_INCH * PDF_PAGE_RENDER_SCALE
+
 
 @dataclass(frozen=True, slots=True)
 class HighlightRectangle:
@@ -70,7 +74,7 @@ def find_text_highlights(
 
 
 class PdfPageRenderer:
-    def __init__(self, *, dpi: float = 144.0) -> None:
+    def __init__(self, *, dpi: float = PDF_PAGE_RENDER_DPI) -> None:
         if dpi <= 0:
             raise ValueError("dpi must be greater than zero")
         self.dpi = dpi
@@ -91,7 +95,7 @@ class PdfPageRenderer:
                     f"page_number {page_number} exceeds PDF page count {document.page_count}"
                 )
             page = document.load_page(page_number - 1)
-            scale = self.dpi / 72.0
+            scale = self.dpi / PDF_POINTS_PER_INCH
             pixmap = page.get_pixmap(matrix=pymupdf.Matrix(scale, scale), alpha=False)
             return pixmap.tobytes("png")
 
