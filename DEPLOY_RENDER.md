@@ -37,7 +37,7 @@ GET /document/page/{page_number}
 ```
 
 For example, source page `5` maps directly to `/document/page/5`. The response
-is an in-memory PNG (`image/png`) rendered at 120 DPI. Up to eight rendered pages
+is an in-memory PNG (`image/png`) rendered at 144 DPI. Up to eight rendered pages
 are held in a bounded process-local LRU cache; no PNG files are written to disk.
 
 ## Uploaded Paper API
@@ -93,6 +93,11 @@ ALLOWED_ORIGINS=https://example.lovable.app,http://localhost:5173
 DEMO_PDF_PATH=/path/to/attention_is_all_you_need.pdf
 DEMO_PDF_URL=https://public.example/attention_is_all_you_need.pdf
 MAX_PDF_UPLOAD_MB=25
+MAX_PDF_PAGES=100
+MAX_EXTRACTED_CHARACTERS=1000000
+MAX_DOCUMENT_CHUNKS=1000
+EMBEDDING_BATCH_SIZE=32
+MAX_RENDER_PIXELS=20000000
 DOCUMENT_STORAGE_ROOT=/tmp/furiosa-rag/documents
 DATABASE_URL=<Render PostgreSQL internal URL; omit to disable logging>
 PAPER_RAG_PROXY_SECRET=<long-random-proxy-secret>
@@ -102,6 +107,7 @@ ASK_RATE_LIMIT_REQUESTS=20
 ASK_RATE_LIMIT_WINDOW_SECONDS=600
 MAX_CONCURRENT_UPLOADS=1
 MAX_CONCURRENT_ASKS=3
+MAX_CONCURRENT_PAGE_RENDERS=2
 MAX_DOCUMENTS=20
 DOCUMENT_TTL_HOURS=6
 MAX_DOCUMENT_STORAGE_MB=500
@@ -120,6 +126,12 @@ The upload and ask limits are process-local controls for the single Render
 instance used by this demo. A rate-limited request returns HTTP 429 with a
 `Retry-After` header. Requests above the concurrency caps fail immediately with
 HTTP 503 instead of entering an unbounded queue.
+
+Public document ingestion is also bounded by page count, extracted-text size, chunk count, and
+4,000-point page dimensions. Embedding inputs are sent in ordered batches instead of one
+document-sized request. Page rendering checks the predicted pixel count before allocating a
+pixmap and uses a separate process-local concurrency limit. These defaults preserve ordinary
+academic papers while rejecting workloads that are unsafe for the public Render instance.
 
 Before accepting a new PDF, the document store removes expired directories and
 then evicts the least-recently-accessed documents until the count and storage

@@ -19,10 +19,12 @@ from furiosa_rag.web.app import (
     ensure_demo_pdf,
     get_chat_log_repository,
     get_demo_pdf_path,
+    get_page_render_concurrency_limiter,
     get_service,
     parse_allowed_origins,
     render_page_png,
 )
+from furiosa_rag.web.limits import ConcurrencyLimiter
 
 
 class FakeDownloadResponse:
@@ -71,10 +73,12 @@ def clear_overrides() -> None:
     app.dependency_overrides.clear()
     get_demo_pdf_path.cache_clear()
     render_page_png.cache_clear()
+    get_page_render_concurrency_limiter.cache_clear()
     yield
     app.dependency_overrides.clear()
     get_demo_pdf_path.cache_clear()
     render_page_png.cache_clear()
+    get_page_render_concurrency_limiter.cache_clear()
 
 
 def test_health_is_immediate_and_does_not_resolve_service() -> None:
@@ -452,6 +456,33 @@ def test_document_page_missing_pdf_returns_existing_unavailable_error() -> None:
     response = TestClient(app).get("/document/page/1")
     assert response.status_code == 503
     assert response.json() == {"detail": "demo document unavailable"}
+
+
+def test_page_render_concurrency_returns_busy_with_retry_after(tmp_path: Path) -> None:
+    document = _create_test_pdf(tmp_path / "page.pdf", pages=1)
+    limiter = ConcurrencyLimiter(1)
+    assert limiter.acquire() is True
+    app.dependency_overrides[get_demo_pdf_path] = lambda: document
+    app.dependency_overrides[get_page_render_concurrency_limiter] = lambda: limiter
+
+    response = TestClient(app).get("/document/page/1")
+
+    assert response.status_code == 503
+    assert response.headers["retry-after"] == "1"
+    limiter.release()
+
+
+def test_page_render_concurrency_is_released_after_exception(tmp_path: Path) -> None:
+    document = _create_test_pdf(tmp_path / "page.pdf", pages=1)
+    limiter = ConcurrencyLimiter(1)
+    app.dependency_overrides[get_demo_pdf_path] = lambda: document
+    app.dependency_overrides[get_page_render_concurrency_limiter] = lambda: limiter
+
+    with patch("furiosa_rag.web.app.render_page_png", side_effect=RuntimeError("render failed")):
+        first = TestClient(app).get("/document/page/1")
+        second = TestClient(app).get("/document/page/1")
+
+    assert first.status_code == second.status_code == 500
 
 
 def test_source_page_number_is_passed_unchanged_to_preview_endpoint(pdf_path: Path) -> None:

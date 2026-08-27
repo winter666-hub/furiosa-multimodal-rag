@@ -23,6 +23,10 @@ from furiosa_rag.vision import VisionBackend
 
 ResultT = TypeVar("ResultT")
 
+DEFAULT_MAX_EXTRACTED_CHARACTERS = 1_000_000
+DEFAULT_MAX_DOCUMENT_CHUNKS = 1_000
+DEFAULT_EMBEDDING_BATCH_SIZE = 32
+
 _INTERNAL_CITATION_RE = re.compile(
     r"\[\s*[Pp]age\s+\d+(?:\s*,\s*chunk\s+page-\d+-chunk-\d+)?\s*\]"
 )
@@ -101,6 +105,10 @@ def clean_internal_citations(answer: str) -> str:
     return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
 
 
+class DocumentTooLargeToIndexError(ValueError):
+    """Raised before upstream indexing when a document exceeds safe resource bounds."""
+
+
 @dataclass(frozen=True, slots=True)
 class RagConfig:
     chunk_size: int = 700
@@ -110,6 +118,9 @@ class RagConfig:
     answer_max_tokens: int = 1024
     vision_max_tokens: int = 256
     vision_dpi: float = 144.0
+    max_extracted_characters: int = DEFAULT_MAX_EXTRACTED_CHARACTERS
+    max_document_chunks: int = DEFAULT_MAX_DOCUMENT_CHUNKS
+    embedding_batch_size: int = DEFAULT_EMBEDDING_BATCH_SIZE
 
     def __post_init__(self) -> None:
         if self.chunk_size <= 0:
@@ -128,6 +139,12 @@ class RagConfig:
             raise ValueError("vision_max_tokens must be greater than zero")
         if self.vision_dpi <= 0:
             raise ValueError("vision_dpi must be greater than zero")
+        if self.max_extracted_characters <= 0:
+            raise ValueError("max_extracted_characters must be greater than zero")
+        if self.max_document_chunks <= 0:
+            raise ValueError("max_document_chunks must be greater than zero")
+        if self.embedding_batch_size <= 0:
+            raise ValueError("embedding_batch_size must be greater than zero")
 
 
 class TextRagPipeline:
@@ -160,6 +177,13 @@ class TextRagPipeline:
         endpoint = getattr(self.embedding, "endpoint", None)
         return str(getattr(endpoint, "model", type(self.embedding).__qualname__))
 
+    def _embed_document_chunks(self, texts: list[str]) -> list[list[float]]:
+        embeddings: list[list[float]] = []
+        batch_size = self.config.embedding_batch_size
+        for start in range(0, len(texts), batch_size):
+            embeddings.extend(self.embedding.embed(texts[start : start + batch_size]))
+        return embeddings
+
     def _retrieve(
         self, pdf_path: str | Path, question: str, *, rebuild_cache: bool
     ) -> tuple[tuple[RetrievedChunk, ...], dict[str, float | bool], str]:
@@ -190,12 +214,16 @@ class TextRagPipeline:
             pages, latency["text_extraction"] = self._measure(
                 lambda: self.extractor.extract(pdf_path)
             )
+            if sum(len(page.text) for page in pages) > self.config.max_extracted_characters:
+                raise DocumentTooLargeToIndexError("PDF contains too much extractable text.")
             chunker = PageChunker(self.config.chunk_size, self.config.chunk_overlap)
             chunks, latency["chunking"] = self._measure(lambda: chunker.split(pages))
             if not chunks:
                 raise ValueError("No chunks were generated from the PDF")
+            if len(chunks) > self.config.max_document_chunks:
+                raise DocumentTooLargeToIndexError("PDF produces too many chunks to index.")
             chunk_vectors, latency["document_embedding"] = self._measure(
-                lambda: self.embedding.embed([chunk.text for chunk in chunks])
+                lambda: self._embed_document_chunks([chunk.text for chunk in chunks])
             )
             _, latency["cache_save"] = self._measure(
                 lambda: self.cache.save(

@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import tempfile
 import threading
 import time
@@ -19,6 +20,9 @@ from fastapi import UploadFile
 
 DOCUMENT_ID_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 PDF_CONTENT_TYPES = {"application/pdf", "application/x-pdf"}
+DEFAULT_MAX_PDF_PAGES = 100
+MAX_PDF_PAGE_WIDTH_POINTS = 4_000.0
+MAX_PDF_PAGE_HEIGHT_POINTS = 4_000.0
 
 
 class DocumentValidationError(ValueError):
@@ -60,16 +64,23 @@ class DocumentStore:
         max_documents: int = 20,
         document_ttl_hours: float = 6,
         max_storage_bytes: int = 500 * 1024 * 1024,
+        max_pdf_pages: int = DEFAULT_MAX_PDF_PAGES,
     ) -> None:
         if max_upload_bytes <= 0:
             raise ValueError("max_upload_bytes must be greater than zero")
         self.root = Path(root)
         self.max_upload_bytes = max_upload_bytes
-        if max_documents <= 0 or document_ttl_hours <= 0 or max_storage_bytes <= 0:
+        if (
+            max_documents <= 0
+            or document_ttl_hours <= 0
+            or max_storage_bytes <= 0
+            or max_pdf_pages <= 0
+        ):
             raise ValueError("document storage limits must be greater than zero")
         self.max_documents = max_documents
         self.document_ttl_seconds = document_ttl_hours * 3600
         self.max_storage_bytes = max_storage_bytes
+        self.max_pdf_pages = max_pdf_pages
         self._state_lock = threading.RLock()
         self._document_locks: dict[str, tuple[threading.Lock, int]] = {}
         self._active_documents: dict[str, int] = {}
@@ -176,8 +187,6 @@ class DocumentStore:
     ) -> list[str]:
         """Remove expired documents, then oldest documents until caps are met."""
 
-        import shutil
-
         current_time = time.time() if now is None else now
         removed: list[str] = []
         with self._state_lock:
@@ -225,16 +234,33 @@ class DocumentStore:
         if (upload.content_type or "").casefold() not in PDF_CONTENT_TYPES:
             raise DocumentValidationError("invalid PDF")
 
-    @staticmethod
-    def _page_count(path: Path) -> int:
+    def _page_count(self, path: Path) -> int:
         try:
             with pymupdf.open(path) as document:
                 pages = document.page_count
+                if pages <= 0:
+                    raise DocumentValidationError("invalid PDF")
+                if pages > self.max_pdf_pages:
+                    raise DocumentTooLargeError("PDF exceeds the maximum allowed page count.")
+                for page in document:
+                    if (
+                        page.rect.width > MAX_PDF_PAGE_WIDTH_POINTS
+                        or page.rect.height > MAX_PDF_PAGE_HEIGHT_POINTS
+                    ):
+                        raise DocumentTooLargeError("PDF page dimensions are too large.")
         except (pymupdf.FileDataError, RuntimeError, ValueError) as exc:
+            if isinstance(exc, DocumentTooLargeError):
+                raise
             raise DocumentValidationError("invalid PDF") from exc
-        if pages <= 0:
-            raise DocumentValidationError("invalid PDF")
         return pages
+
+    def discard(self, document_id: str) -> None:
+        """Remove an unprepared document without accepting arbitrary paths."""
+        directory = self._directory(document_id)
+        with self._state_lock:
+            if document_id in self._active_documents:
+                raise RuntimeError("cannot discard an active document")
+            shutil.rmtree(directory, ignore_errors=True)
 
     async def register(self, upload: UploadFile) -> RegisteredDocument:
         self._validate_upload_metadata(upload)

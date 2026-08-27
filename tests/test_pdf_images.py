@@ -3,7 +3,7 @@ from pathlib import Path
 import pymupdf
 import pytest
 
-from furiosa_rag.pdf_images import PdfPageRenderer, find_text_highlights
+from furiosa_rag.pdf_images import PdfPageRenderer, RenderPixelLimitError, find_text_highlights
 
 
 def test_pdf_renderer_renders_one_based_selected_page_to_png(tmp_path: Path) -> None:
@@ -33,6 +33,29 @@ def test_default_page_rendering_is_two_times_pdf_dimensions(tmp_path: Path) -> N
     pixmap = pymupdf.Pixmap(PdfPageRenderer().render_png(pdf_path, 1))
 
     assert (pixmap.width, pixmap.height) == (400, 600)
+
+
+def test_render_pixel_limit_rejects_before_pixmap_allocation(tmp_path: Path) -> None:
+    pdf_path = tmp_path / "large-page.pdf"
+    document = pymupdf.open()
+    document.new_page(width=2_000, height=2_000)
+    document.save(pdf_path)
+    document.close()
+
+    with pytest.raises(RenderPixelLimitError, match="too large to preview"):
+        PdfPageRenderer(max_pixels=10_000_000).render_png(pdf_path, 1)
+
+
+def test_render_pixel_limit_allows_normal_page(tmp_path: Path) -> None:
+    pdf_path = tmp_path / "normal-page.pdf"
+    document = pymupdf.open()
+    document.new_page(width=612, height=792)
+    document.save(pdf_path)
+    document.close()
+
+    png = PdfPageRenderer(max_pixels=2_000_000).render_png(pdf_path, 1)
+
+    assert png.startswith(b"\x89PNG\r\n\x1a\n")
 
 
 def test_two_times_rendering_keeps_highlights_in_pdf_coordinates(tmp_path: Path) -> None:

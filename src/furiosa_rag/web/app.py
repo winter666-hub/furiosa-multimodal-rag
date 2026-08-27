@@ -26,8 +26,13 @@ from furiosa_rag.config import ModelEndpoint, Settings
 from furiosa_rag.embedding import FuriosaEmbedding
 from furiosa_rag.llm import FuriosaLlm
 from furiosa_rag.models import RagAnswer
-from furiosa_rag.pdf_images import PdfPageRenderer, find_text_highlights
-from furiosa_rag.pipeline import TextRagPipeline, clean_internal_citations
+from furiosa_rag.pdf_images import PdfPageRenderer, RenderPixelLimitError, find_text_highlights
+from furiosa_rag.pipeline import (
+    DocumentTooLargeToIndexError,
+    RagConfig,
+    TextRagPipeline,
+    clean_internal_citations,
+)
 from furiosa_rag.reranker import FuriosaReranker
 from furiosa_rag.router import AdaptiveQueryRouter, LLMQueryRouter, QueryRoute, QueryRouter
 from furiosa_rag.web.database import (
@@ -177,7 +182,9 @@ def get_demo_pdf_path() -> Path | None:
 @lru_cache(maxsize=8)
 def render_page_png(pdf_path: str, page_number: int) -> bytes:
     """Render and cache up to eight one-based source pages in memory."""
-    return PdfPageRenderer().render_png(pdf_path, page_number)
+    return PdfPageRenderer(
+        max_pixels=_positive_int_env("MAX_RENDER_PIXELS", 20_000_000)
+    ).render_png(pdf_path, page_number)
 
 
 def _max_upload_bytes() -> int:
@@ -219,6 +226,7 @@ def get_document_store() -> DocumentStore:
         max_documents=_positive_int_env("MAX_DOCUMENTS", 20),
         document_ttl_hours=_positive_float_env("DOCUMENT_TTL_HOURS", 6),
         max_storage_bytes=_positive_int_env("MAX_DOCUMENT_STORAGE_MB", 500) * 1024 * 1024,
+        max_pdf_pages=_positive_int_env("MAX_PDF_PAGES", 100),
     )
 
 
@@ -246,6 +254,11 @@ def get_upload_concurrency_limiter() -> ConcurrencyLimiter:
 @lru_cache(maxsize=1)
 def get_ask_concurrency_limiter() -> ConcurrencyLimiter:
     return ConcurrencyLimiter(_positive_int_env("MAX_CONCURRENT_ASKS", 3))
+
+
+@lru_cache(maxsize=1)
+def get_page_render_concurrency_limiter() -> ConcurrencyLimiter:
+    return ConcurrencyLimiter(_positive_int_env("MAX_CONCURRENT_PAGE_RENDERS", 2))
 
 
 @lru_cache(maxsize=1)
@@ -290,16 +303,19 @@ class DocumentPipelineFactory:
         embedding: FuriosaEmbedding,
         reranker: FuriosaReranker,
         llm: FuriosaLlm,
+        config: RagConfig | None = None,
     ) -> None:
         self.embedding = embedding
         self.reranker = reranker
         self.llm = llm
+        self.config = config or RagConfig()
 
     def create(self, document: RegisteredDocument) -> TextRagPipeline:
         return TextRagPipeline(
             self.embedding,
             self.reranker,
             self.llm,
+            config=self.config,
             cache=DocumentEmbeddingCache(document.cache_dir),
         )
 
@@ -499,17 +515,23 @@ def get_service() -> HostedOnlyRagService:
     embedding = FuriosaEmbedding(_endpoint(settings, "embedding"), client)
     reranker = FuriosaReranker(_endpoint(settings, "reranker"), client)
     router = AdaptiveQueryRouter(LLMQueryRouter(_endpoint(settings, "llm"), client))
+    rag_config = RagConfig(
+        max_extracted_characters=_positive_int_env("MAX_EXTRACTED_CHARACTERS", 1_000_000),
+        max_document_chunks=_positive_int_env("MAX_DOCUMENT_CHUNKS", 1_000),
+        embedding_batch_size=_positive_int_env("EMBEDDING_BATCH_SIZE", 32),
+    )
     pipeline = TextRagPipeline(
         embedding,
         reranker,
         llm,
+        config=rag_config,
     )
     return HostedOnlyRagService(
         router,
         pipeline,
         pdf_path or "",
         document_store=get_document_store(),
-        pipeline_factory=DocumentPipelineFactory(embedding, reranker, llm),
+        pipeline_factory=DocumentPipelineFactory(embedding, reranker, llm, rag_config),
     )
 
 
@@ -552,11 +574,16 @@ async def upload_document(
     if not concurrency.acquire():
         logger.warning("Demo upload concurrency limit reached")
         raise HTTPException(status_code=503, detail=BUSY_DETAIL)
+    document: RegisteredDocument | None = None
+    prepared = False
     try:
         document = await service.document_store.register(file)
         current = await run_in_threadpool(_prepare_document_locked, service, document)
+        prepared = True
     except DocumentTooLargeError as exc:
-        raise HTTPException(status_code=413, detail="PDF upload is too large") from exc
+        raise HTTPException(status_code=413, detail=str(exc)) from exc
+    except DocumentTooLargeToIndexError as exc:
+        raise HTTPException(status_code=413, detail=str(exc)) from exc
     except DocumentValidationError as exc:
         raise HTTPException(status_code=400, detail="invalid PDF") from exc
     except FuriosaApiError as exc:
@@ -564,6 +591,13 @@ async def upload_document(
     except (OSError, RuntimeError, ValueError) as exc:
         raise HTTPException(status_code=500, detail="document processing failed") from exc
     finally:
+        if document is not None and not document.cache_hit and not prepared:
+            try:
+                await run_in_threadpool(
+                    service.document_store.discard, document.record.document_id
+                )
+            except (OSError, RuntimeError):
+                logger.warning("Failed to discard an unprepared document")
         concurrency.release()
     return DocumentResponse(
         document_id=document.record.document_id,
@@ -600,6 +634,9 @@ async def uploaded_document_page(
     document_id: str,
     page_number: int,
     store: Annotated[DocumentStore, Depends(get_document_store)],
+    concurrency: Annotated[
+        ConcurrencyLimiter, Depends(get_page_render_concurrency_limiter)
+    ],
 ) -> Response:
     if page_number <= 0:
         raise HTTPException(status_code=422, detail="page_number must be greater than zero")
@@ -608,12 +645,23 @@ async def uploaded_document_page(
         pdf_path = store.pdf_path(document_id)
     except DocumentNotFoundError as exc:
         raise HTTPException(status_code=404, detail="document not found") from exc
+    if not concurrency.acquire():
+        raise HTTPException(
+            status_code=503,
+            detail=BUSY_DETAIL,
+            headers={"Retry-After": "1"},
+        )
     try:
-        content = await run_in_threadpool(render_page_png, str(pdf_path), page_number)
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail="document page not found") from exc
-    except (FileNotFoundError, OSError, RuntimeError) as exc:
-        raise HTTPException(status_code=500, detail="page preview unavailable") from exc
+        try:
+            content = await run_in_threadpool(render_page_png, str(pdf_path), page_number)
+        except RenderPixelLimitError as exc:
+            raise HTTPException(status_code=413, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail="document page not found") from exc
+        except (FileNotFoundError, OSError, RuntimeError) as exc:
+            raise HTTPException(status_code=500, detail="page preview unavailable") from exc
+    finally:
+        concurrency.release()
     return Response(
         content=content,
         media_type="image/png",
@@ -625,19 +673,33 @@ async def uploaded_document_page(
 async def document_page(
     page_number: int,
     pdf_path: Annotated[Path | None, Depends(get_demo_pdf_path)],
+    concurrency: Annotated[
+        ConcurrencyLimiter, Depends(get_page_render_concurrency_limiter)
+    ],
 ) -> Response:
     if page_number <= 0:
         raise HTTPException(status_code=422, detail="page_number must be greater than zero")
     if pdf_path is None or not pdf_path.is_file():
         raise HTTPException(status_code=503, detail="demo document unavailable")
+    if not concurrency.acquire():
+        raise HTTPException(
+            status_code=503,
+            detail=BUSY_DETAIL,
+            headers={"Retry-After": "1"},
+        )
     try:
-        content = await run_in_threadpool(render_page_png, str(pdf_path), page_number)
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=503, detail="demo document unavailable") from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail="document page not found") from exc
-    except (OSError, RuntimeError) as exc:
-        raise HTTPException(status_code=500, detail="page preview unavailable") from exc
+        try:
+            content = await run_in_threadpool(render_page_png, str(pdf_path), page_number)
+        except RenderPixelLimitError as exc:
+            raise HTTPException(status_code=413, detail=str(exc)) from exc
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=503, detail="demo document unavailable") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail="document page not found") from exc
+        except (OSError, RuntimeError) as exc:
+            raise HTTPException(status_code=500, detail="page preview unavailable") from exc
+    finally:
+        concurrency.release()
     return Response(
         content=content,
         media_type="image/png",

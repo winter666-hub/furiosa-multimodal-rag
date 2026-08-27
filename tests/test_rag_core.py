@@ -6,6 +6,7 @@ from furiosa_rag.cache import DocumentEmbeddingCache
 from furiosa_rag.chunking import PageChunker
 from furiosa_rag.models import Chunk, PageText
 from furiosa_rag.pipeline import (
+    DocumentTooLargeToIndexError,
     MultimodalRagPipeline,
     RagConfig,
     TextRagPipeline,
@@ -44,6 +45,9 @@ def test_rag_config_rejects_top_n_greater_than_top_k() -> None:
         {"chunk_overlap": -1},
         {"chunk_size": 3, "chunk_overlap": 3},
         {"answer_max_tokens": 0},
+        {"max_extracted_characters": 0},
+        {"max_document_chunks": 0},
+        {"embedding_batch_size": 0},
     ),
 )
 def test_rag_config_rejects_invalid_values(kwargs: dict[str, int]) -> None:
@@ -80,6 +84,122 @@ class FakeLlm:
         self.prompts.append(prompt)
         self.max_tokens.append(max_tokens)
         return self.answer
+
+
+class FixedExtractor:
+    def __init__(self, text: str) -> None:
+        self.text = text
+
+    def extract(self, pdf_path: str | Path) -> list[PageText]:
+        return [PageText(1, self.text)]
+
+
+def _bounded_pipeline(
+    tmp_path: Path,
+    *,
+    text: str,
+    embedding: FakeEmbedding,
+    config: RagConfig,
+) -> tuple[Path, TextRagPipeline]:
+    pdf_path = tmp_path / "bounded.pdf"
+    pdf_path.write_bytes(b"bounded-pdf-identity")
+    return pdf_path, TextRagPipeline(
+        embedding,
+        FakeReranker(),
+        FakeLlm(),
+        config=config,
+        extractor=FixedExtractor(text),
+        cache=DocumentEmbeddingCache(tmp_path / "cache"),
+    )
+
+
+def test_extracted_character_limit_fails_before_embedding(tmp_path: Path) -> None:
+    embedding = FakeEmbedding()
+    pdf_path, pipeline = _bounded_pipeline(
+        tmp_path,
+        text="x" * 11,
+        embedding=embedding,
+        config=RagConfig(max_extracted_characters=10),
+    )
+
+    with pytest.raises(DocumentTooLargeToIndexError, match="extractable text"):
+        pipeline.answer(pdf_path, "question")
+
+    assert embedding.calls == []
+    assert list((tmp_path / "cache").glob("*.npz")) == []
+
+
+def test_chunk_limit_fails_before_embedding(tmp_path: Path) -> None:
+    embedding = FakeEmbedding()
+    pdf_path, pipeline = _bounded_pipeline(
+        tmp_path,
+        text="one two three",
+        embedding=embedding,
+        config=RagConfig(
+            chunk_size=1,
+            chunk_overlap=0,
+            top_k=1,
+            top_n=1,
+            max_document_chunks=2,
+        ),
+    )
+
+    with pytest.raises(DocumentTooLargeToIndexError, match="too many chunks"):
+        pipeline.answer(pdf_path, "question")
+
+    assert embedding.calls == []
+    assert list((tmp_path / "cache").glob("*.npz")) == []
+
+
+def test_document_embeddings_are_batched_in_order() -> None:
+    class OrderedEmbedding(FakeEmbedding):
+        def embed(self, texts: list[str]) -> list[list[float]]:
+            self.calls.append(list(texts))
+            return [[float(text), 0.0] for text in texts]
+
+    embedding = OrderedEmbedding()
+    pipeline = TextRagPipeline(
+        embedding,
+        FakeReranker(),
+        FakeLlm(),
+        config=RagConfig(embedding_batch_size=32),
+    )
+    texts = [str(index) for index in range(70)]
+
+    embeddings = pipeline._embed_document_chunks(texts)
+
+    assert [len(call) for call in embedding.calls] == [32, 32, 6]
+    assert [int(vector[0]) for vector in embeddings] == list(range(70))
+
+
+def test_embedding_batch_failure_does_not_write_partial_cache(tmp_path: Path) -> None:
+    class FailingSecondBatch(FakeEmbedding):
+        def embed(self, texts: list[str]) -> list[list[float]]:
+            self.calls.append(list(texts))
+            if len(self.calls) == 2:
+                raise RuntimeError("batch failed")
+            return [[1.0, 0.0] for _ in texts]
+
+    embedding = FailingSecondBatch()
+    pdf_path, pipeline = _bounded_pipeline(
+        tmp_path,
+        text=" ".join(f"word-{index}" for index in range(70)),
+        embedding=embedding,
+        config=RagConfig(
+            chunk_size=1,
+            chunk_overlap=0,
+            top_k=1,
+            top_n=1,
+            max_document_chunks=100,
+            embedding_batch_size=32,
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="batch failed"):
+        pipeline.answer(pdf_path, "question")
+
+    assert [len(call) for call in embedding.calls] == [32, 32]
+    assert list((tmp_path / "cache").glob("*.npz")) == []
 
 
 @pytest.mark.parametrize(

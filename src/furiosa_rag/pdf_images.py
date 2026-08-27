@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import math
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,6 +13,11 @@ import pymupdf
 PDF_POINTS_PER_INCH = 72.0
 PDF_PAGE_RENDER_SCALE = 2.0
 PDF_PAGE_RENDER_DPI = PDF_POINTS_PER_INCH * PDF_PAGE_RENDER_SCALE
+DEFAULT_MAX_RENDER_PIXELS = 20_000_000
+
+
+class RenderPixelLimitError(ValueError):
+    """Raised before allocating a pixmap that exceeds the configured pixel budget."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,10 +80,15 @@ def find_text_highlights(
 
 
 class PdfPageRenderer:
-    def __init__(self, *, dpi: float = PDF_PAGE_RENDER_DPI) -> None:
+    def __init__(
+        self, *, dpi: float = PDF_PAGE_RENDER_DPI, max_pixels: int = DEFAULT_MAX_RENDER_PIXELS
+    ) -> None:
         if dpi <= 0:
             raise ValueError("dpi must be greater than zero")
+        if max_pixels <= 0:
+            raise ValueError("max_pixels must be greater than zero")
         self.dpi = dpi
+        self.max_pixels = max_pixels
 
     def render_png(self, pdf_path: str | Path, page_number: int) -> bytes:
         """Render a one-based PDF page number to PNG bytes without writing to disk."""
@@ -96,6 +107,10 @@ class PdfPageRenderer:
                 )
             page = document.load_page(page_number - 1)
             scale = self.dpi / PDF_POINTS_PER_INCH
+            render_width = math.ceil(page.rect.width * scale)
+            render_height = math.ceil(page.rect.height * scale)
+            if render_width * render_height > self.max_pixels:
+                raise RenderPixelLimitError("PDF page is too large to preview.")
             pixmap = page.get_pixmap(matrix=pymupdf.Matrix(scale, scale), alpha=False)
             return pixmap.tobytes("png")
 

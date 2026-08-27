@@ -276,9 +276,13 @@ production-grade security layer.
 `.env`, SSH/private keys, uploaded PDFs, runtime caches, benchmark outputs, and frontend builds are
 ignored. Keep Furiosa keys and proxy secrets in deployment stores; never commit user documents.
 
+Public uploads are bounded by file size, page count, extracted-text size, chunk count, PDF page
+dimensions, and rendered pixel count. Embedding requests are processed in ordered batches, and
+page rendering has a small concurrency cap to avoid oversized public workloads.
+
 ## Tests
 
-Verified status: **162 backend tests passed**, **Ruff passed**, and the **frontend production build
+Verified status: **178 backend tests passed**, **Ruff passed**, and the **frontend production build
 succeeded**.
 
 The repository has historical frontend-wide CRLF/Prettier lint noise, so this README does not claim

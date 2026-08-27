@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 from starlette.datastructures import Headers, UploadFile
 
 from furiosa_rag.models import Chunk, RagAnswer, RetrievedChunk
+from furiosa_rag.pipeline import DocumentTooLargeToIndexError
 from furiosa_rag.router import QueryRoute, RoutingDecision
 from furiosa_rag.web.app import (
     HostedOnlyRagService,
@@ -58,6 +59,18 @@ class FakeUploadService:
         (document.cache_dir / "prepared.npz").write_bytes(b"cache")
 
 
+class FailingUploadService(FakeUploadService):
+    def prepare_document(self, document: RegisteredDocument) -> None:
+        document.cache_dir.mkdir(parents=True, exist_ok=True)
+        (document.cache_dir / ".partial").write_bytes(b"partial")
+        raise RuntimeError("indexing failed")
+
+
+class OversizedTextUploadService(FakeUploadService):
+    def prepare_document(self, document: RegisteredDocument) -> None:
+        raise DocumentTooLargeToIndexError("PDF contains too much extractable text.")
+
+
 @pytest.fixture(autouse=True)
 def clear_web_state() -> None:
     app.dependency_overrides.clear()
@@ -89,6 +102,76 @@ def test_valid_pdf_upload_and_metadata(tmp_path: Path) -> None:
     metadata = TestClient(app).get(f"/documents/{body['document_id']}")
     assert metadata.status_code == 200
     assert metadata.json()["document_id"] == body["document_id"]
+
+
+def test_pdf_at_page_limit_is_accepted(tmp_path: Path) -> None:
+    store = DocumentStore(tmp_path, max_upload_bytes=1024 * 1024, max_pdf_pages=2)
+    app.dependency_overrides[get_service] = lambda: FakeUploadService(store)
+
+    response = TestClient(app).post(
+        "/documents",
+        files={"file": ("paper.pdf", _pdf_bytes(pages=2), "application/pdf")},
+    )
+
+    assert response.status_code == 200
+
+
+def test_pdf_above_page_limit_is_rejected_before_storage(tmp_path: Path) -> None:
+    store = DocumentStore(tmp_path, max_upload_bytes=1024 * 1024, max_pdf_pages=2)
+    app.dependency_overrides[get_service] = lambda: FakeUploadService(store)
+
+    response = TestClient(app).post(
+        "/documents",
+        files={"file": ("paper.pdf", _pdf_bytes(pages=3), "application/pdf")},
+    )
+
+    assert response.status_code == 413
+    assert response.json() == {"detail": "PDF exceeds the maximum allowed page count."}
+    assert list(tmp_path.glob("[0-9a-f]" * 64)) == []
+
+
+def test_pdf_with_oversized_page_dimensions_is_rejected(tmp_path: Path) -> None:
+    document = pymupdf.open()
+    document.new_page(width=4_001, height=500).insert_text((72, 72), "oversized page")
+    content = document.tobytes()
+    document.close()
+    store = DocumentStore(tmp_path, max_upload_bytes=1024 * 1024)
+    app.dependency_overrides[get_service] = lambda: FakeUploadService(store)
+
+    response = TestClient(app).post(
+        "/documents",
+        files={"file": ("poster.pdf", content, "application/pdf")},
+    )
+
+    assert response.status_code == 413
+    assert response.json() == {"detail": "PDF page dimensions are too large."}
+
+
+def test_failed_indexing_discards_document_and_partial_cache(tmp_path: Path) -> None:
+    store = DocumentStore(tmp_path, max_upload_bytes=1024 * 1024)
+    app.dependency_overrides[get_service] = lambda: FailingUploadService(store)
+
+    response = TestClient(app).post(
+        "/documents",
+        files={"file": ("paper.pdf", _pdf_bytes(), "application/pdf")},
+    )
+
+    assert response.status_code == 500
+    assert not any(path.is_dir() for path in tmp_path.iterdir())
+
+
+def test_index_resource_limit_returns_safe_413_and_discards_document(tmp_path: Path) -> None:
+    store = DocumentStore(tmp_path, max_upload_bytes=1024 * 1024)
+    app.dependency_overrides[get_service] = lambda: OversizedTextUploadService(store)
+
+    response = TestClient(app).post(
+        "/documents",
+        files={"file": ("paper.pdf", _pdf_bytes(), "application/pdf")},
+    )
+
+    assert response.status_code == 413
+    assert response.json() == {"detail": "PDF contains too much extractable text."}
+    assert not any(path.is_dir() for path in tmp_path.iterdir())
 
 
 @pytest.mark.parametrize(
