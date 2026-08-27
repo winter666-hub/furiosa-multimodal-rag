@@ -23,8 +23,8 @@ def test_pdf_renderer_renders_one_based_selected_page_to_png(tmp_path: Path) -> 
         renderer.render_png(pdf_path, 0)
 
 
-def test_default_page_rendering_is_two_times_pdf_dimensions(tmp_path: Path) -> None:
-    pdf_path = tmp_path / "two-times.pdf"
+def test_default_page_rendering_is_three_times_pdf_dimensions(tmp_path: Path) -> None:
+    pdf_path = tmp_path / "three-times.pdf"
     document = pymupdf.open()
     document.new_page(width=200, height=300).insert_text((20, 30), "readable source text")
     document.save(pdf_path)
@@ -32,7 +32,7 @@ def test_default_page_rendering_is_two_times_pdf_dimensions(tmp_path: Path) -> N
 
     pixmap = pymupdf.Pixmap(PdfPageRenderer().render_png(pdf_path, 1))
 
-    assert (pixmap.width, pixmap.height) == (400, 600)
+    assert (pixmap.width, pixmap.height) == (600, 900)
 
 
 def test_render_pixel_limit_rejects_before_pixmap_allocation(tmp_path: Path) -> None:
@@ -53,12 +53,12 @@ def test_render_pixel_limit_allows_normal_page(tmp_path: Path) -> None:
     document.save(pdf_path)
     document.close()
 
-    png = PdfPageRenderer(max_pixels=2_000_000).render_png(pdf_path, 1)
+    png = PdfPageRenderer(max_pixels=5_000_000).render_png(pdf_path, 1)
 
     assert png.startswith(b"\x89PNG\r\n\x1a\n")
 
 
-def test_two_times_rendering_keeps_highlights_in_pdf_coordinates(tmp_path: Path) -> None:
+def test_three_times_rendering_keeps_highlights_in_pdf_coordinates(tmp_path: Path) -> None:
     pdf_path = tmp_path / "highlight-scale.pdf"
     document = pymupdf.open()
     document.new_page(width=200, height=300).insert_text((20, 30), "stable highlight text")
@@ -69,7 +69,7 @@ def test_two_times_rendering_keeps_highlights_in_pdf_coordinates(tmp_path: Path)
     pixmap = pymupdf.Pixmap(PdfPageRenderer().render_png(pdf_path, 1))
 
     assert (located.page_width, located.page_height) == (200.0, 300.0)
-    assert (pixmap.width, pixmap.height) == (400, 600)
+    assert (pixmap.width, pixmap.height) == (600, 900)
     assert located.rectangles
     assert 0 < located.rectangles[0].x / located.page_width < 1
     assert 0 < located.rectangles[0].y / located.page_height < 1

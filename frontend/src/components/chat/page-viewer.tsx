@@ -11,14 +11,7 @@ import {
   X,
 } from "lucide-react";
 import type { AskSource } from "@/lib/ask-types";
-
-const MIN_ZOOM = 0.75;
-const MAX_ZOOM = 3;
-const ZOOM_STEP = 0.25;
-
-function clampZoom(value: number) {
-  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, value));
-}
+import { MAX_ZOOM, MIN_ZOOM, ZOOM_STEP, clampZoom } from "./page-viewer-zoom";
 
 export function PageViewer({
   documentId,
@@ -49,7 +42,7 @@ export function PageViewer({
   useEffect(() => {
     setZoom(1);
     scrollContainerRef.current?.scrollTo({ top: 0, left: 0 });
-  }, [page, documentId, source]);
+  }, [page, documentId, source?.chunk_id]);
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       const target = event.target as HTMLElement | null;
@@ -215,7 +208,7 @@ export function PageViewer({
               </div>
             </div>
           ) : (
-            <div className="relative m-auto w-fit max-w-full shrink-0" style={{ zoom }}>
+            <div className="relative m-auto w-fit shrink-0" style={{ zoom }}>
               <img
                 key={`${documentId}-${page}-${attempt}`}
                 src={`${imageUrl}?attempt=${attempt}`}

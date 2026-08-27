@@ -37,7 +37,7 @@ GET /document/page/{page_number}
 ```
 
 For example, source page `5` maps directly to `/document/page/5`. The response
-is an in-memory PNG (`image/png`) rendered at 144 DPI. Up to eight rendered pages
+is an in-memory PNG (`image/png`) rendered at 216 DPI (3× PDF point resolution). Up to eight rendered pages
 are held in a bounded process-local LRU cache; no PNG files are written to disk.
 
 ## Uploaded Paper API
