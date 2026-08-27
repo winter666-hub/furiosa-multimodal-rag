@@ -39,6 +39,7 @@ class ModelEndpoint:
 class Settings:
     api_key: str
     request_timeout: float
+    vision_request_timeout: float
     vision_max_tokens: int
     endpoints: tuple[ModelEndpoint, ...]
 
@@ -48,6 +49,9 @@ class Settings:
         timeout = float(os.getenv("FURIOSA_REQUEST_TIMEOUT", "10"))
         if timeout <= 0:
             raise ValueError("FURIOSA_REQUEST_TIMEOUT must be greater than zero")
+        vision_timeout = float(os.getenv("FURIOSA_VISION_REQUEST_TIMEOUT", "60"))
+        if vision_timeout <= 0:
+            raise ValueError("FURIOSA_VISION_REQUEST_TIMEOUT must be greater than zero")
         vision_max_tokens = int(os.getenv("FURIOSA_VISION_MAX_TOKENS", "256"))
         if vision_max_tokens <= 0:
             raise ValueError("FURIOSA_VISION_MAX_TOKENS must be greater than zero")
@@ -77,6 +81,7 @@ class Settings:
         return cls(
             api_key=os.getenv("FURIOSA_API_KEY", "EMPTY"),
             request_timeout=timeout,
+            vision_request_timeout=vision_timeout,
             vision_max_tokens=vision_max_tokens,
             endpoints=endpoints,
         )

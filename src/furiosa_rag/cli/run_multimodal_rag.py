@@ -14,6 +14,10 @@ from furiosa_rag.reranker import FuriosaReranker
 from furiosa_rag.vision import FuriosaVision
 
 
+def _vision_exit_code(*, required: bool, selected_page: int | None, used: bool) -> int:
+    return 1 if required and (selected_page is None or not used) else 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run Furiosa Multimodal RAG on a PDF")
     parser.add_argument("pdf")
@@ -30,15 +34,21 @@ def main() -> int:
         help="Override FURIOSA_VISION_MAX_TOKENS (default: 256)",
     )
     parser.add_argument("--rebuild-cache", action="store_true")
+    parser.add_argument(
+        "--require-vision",
+        action="store_true",
+        help="Exit non-zero unless Direct Vision produced visual evidence",
+    )
     args = parser.parse_args()
 
     settings = Settings.from_env()
     client = FuriosaClient(settings.api_key, settings.request_timeout)
+    vision_client = FuriosaClient(settings.api_key, settings.vision_request_timeout)
     pipeline = MultimodalRagPipeline(
         FuriosaEmbedding(_endpoint(settings, "embedding"), client),
         FuriosaReranker(_endpoint(settings, "reranker"), client),
         FuriosaLlm(_endpoint(settings, "llm"), client),
-        vision=FuriosaVision(_endpoint(settings, "vision"), client),
+        vision=FuriosaVision(_endpoint(settings, "vision"), vision_client),
         config=RagConfig(
             chunk_size=args.chunk_size,
             chunk_overlap=args.chunk_overlap,
@@ -61,11 +71,13 @@ def main() -> int:
             f"retrieval={source.retrieval_score:.4f} rerank={source.rerank_score:.4f}"
         )
     print("\nVISION")
+    print("route=VISUAL_REQUIRED")
     print(f"selected_page={result.vision.selected_page}")
-    print(f"used={str(result.vision.used).lower()}")
+    print(f"vision_used={str(result.vision.used).lower()}")
+    print(f"vision_available={str(result.vision.used).lower()}")
+    print(f"fallback_used={str(not result.vision.used).lower()}")
     print(f"model={result.vision.model}")
-    if result.vision.error:
-        print(f"error={result.vision.error}")
+    print(f"error={result.vision.error or 'none'}")
     print("\nLATENCY_MS")
     for stage, latency_ms in result.latency_ms.items():
         if isinstance(latency_ms, bool):
@@ -73,7 +85,14 @@ def main() -> int:
         else:
             print(f"{stage}={latency_ms:.1f}")
     print(f"cache_path={result.cache_path}")
-    return 0
+    exit_code = _vision_exit_code(
+        required=args.require_vision,
+        selected_page=result.vision.selected_page,
+        used=result.vision.used,
+    )
+    if exit_code:
+        print("Direct Vision was required but did not produce visual evidence.")
+    return exit_code
 
 
 if __name__ == "__main__":

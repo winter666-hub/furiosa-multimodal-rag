@@ -18,6 +18,22 @@ def test_vision_max_tokens_defaults_to_256(monkeypatch, tmp_path) -> None:
     assert settings.vision_max_tokens == 256
 
 
+def test_vision_request_timeout_defaults_to_60(monkeypatch, tmp_path) -> None:
+    monkeypatch.delenv("FURIOSA_VISION_REQUEST_TIMEOUT", raising=False)
+    settings = Settings.from_env(tmp_path / "missing.env")
+    assert settings.vision_request_timeout == 60
+
+
+def test_vision_request_timeout_must_be_positive(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("FURIOSA_VISION_REQUEST_TIMEOUT", "0")
+    try:
+        Settings.from_env(tmp_path / "missing.env")
+    except ValueError as exc:
+        assert "FURIOSA_VISION_REQUEST_TIMEOUT" in str(exc)
+    else:
+        raise AssertionError("Settings accepted a non-positive Vision request timeout")
+
+
 def test_vision_max_tokens_must_be_positive(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("FURIOSA_VISION_MAX_TOKENS", "0")
     try:
