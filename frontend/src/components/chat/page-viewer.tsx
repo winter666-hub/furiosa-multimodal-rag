@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -11,7 +11,15 @@ import {
   X,
 } from "lucide-react";
 import type { AskSource } from "@/lib/ask-types";
-import { MAX_ZOOM, MIN_ZOOM, ZOOM_STEP, clampZoom } from "./page-viewer-zoom";
+import {
+  MAX_ZOOM,
+  MIN_ZOOM,
+  ZOOM_STEP,
+  clampZoom,
+  fitPageSize,
+  zoomPageSize,
+  type PageSize,
+} from "./page-viewer-zoom";
 
 export function PageViewer({
   documentId,
@@ -35,10 +43,33 @@ export function PageViewer({
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [attempt, setAttempt] = useState(0);
   const [zoom, setZoom] = useState(1);
+  const [basePageSize, setBasePageSize] = useState<PageSize>();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const imageRef = useRef<HTMLImageElement>(null);
   const imageUrl = `/api/public/documents/${encodeURIComponent(documentId)}/pages/${page}`;
 
-  useEffect(() => setStatus("loading"), [page, documentId, attempt]);
+  const updateBasePageSize = useCallback(() => {
+    const container = scrollContainerRef.current;
+    const image = imageRef.current;
+    if (!container || !image?.naturalWidth || !image.naturalHeight) return;
+
+    const styles = window.getComputedStyle(container);
+    const horizontalPadding = parseFloat(styles.paddingLeft) + parseFloat(styles.paddingRight);
+    const verticalPadding = parseFloat(styles.paddingTop) + parseFloat(styles.paddingBottom);
+    setBasePageSize(
+      fitPageSize(
+        image.naturalWidth,
+        image.naturalHeight,
+        container.clientWidth - horizontalPadding,
+        Math.min(window.innerHeight * 0.66, container.clientHeight - verticalPadding),
+      ),
+    );
+  }, []);
+
+  useEffect(() => {
+    setStatus("loading");
+    setBasePageSize(undefined);
+  }, [page, documentId, attempt]);
   useEffect(() => {
     setZoom(1);
     scrollContainerRef.current?.scrollTo({ top: 0, left: 0 });
@@ -94,6 +125,16 @@ export function PageViewer({
       document.body.style.overflow = previous;
     };
   }, []);
+
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const observer = new ResizeObserver(updateBasePageSize);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [updateBasePageSize]);
+
+  const zoomedPageSize = basePageSize ? zoomPageSize(basePageSize, zoom) : undefined;
 
   return (
     <div
@@ -208,14 +249,22 @@ export function PageViewer({
               </div>
             </div>
           ) : (
-            <div className="relative m-auto w-fit shrink-0" style={{ zoom }}>
+            <div
+              data-testid="zoomed-page-canvas"
+              className="relative m-auto shrink-0"
+              style={zoomedPageSize}
+            >
               <img
+                ref={imageRef}
                 key={`${documentId}-${page}-${attempt}`}
                 src={`${imageUrl}?attempt=${attempt}`}
                 alt={`${filename}의 ${page}페이지`}
-                onLoad={() => setStatus("ready")}
+                onLoad={() => {
+                  updateBasePageSize();
+                  setStatus("ready");
+                }}
                 onError={() => setStatus("error")}
-                className={`block max-h-[66dvh] w-auto max-w-full rounded-sm border border-border bg-card shadow-md transition-opacity ${status === "ready" ? "opacity-100" : "opacity-0"}`}
+                className={`block rounded-sm border border-border bg-card shadow-md transition-opacity ${basePageSize ? "size-full max-h-none max-w-none" : "h-auto max-h-[66dvh] w-auto max-w-full"} ${status === "ready" ? "opacity-100" : "opacity-0"}`}
               />
               {status === "ready" && source?.page_width && source.page_height
                 ? source.highlights.map((highlight, index) => (
