@@ -1,14 +1,24 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ChevronLeft,
   ChevronRight,
   ExternalLink,
   Loader2,
+  Minus,
+  Plus,
   RotateCcw,
   Upload,
   X,
 } from "lucide-react";
 import type { AskSource } from "@/lib/ask-types";
+
+const MIN_ZOOM = 0.75;
+const MAX_ZOOM = 3;
+const ZOOM_STEP = 0.25;
+
+function clampZoom(value: number) {
+  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, value));
+}
 
 export function PageViewer({
   documentId,
@@ -31,18 +41,58 @@ export function PageViewer({
 }) {
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [attempt, setAttempt] = useState(0);
+  const [zoom, setZoom] = useState(1);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const imageUrl = `/api/public/documents/${encodeURIComponent(documentId)}/pages/${page}`;
 
   useEffect(() => setStatus("loading"), [page, documentId, attempt]);
   useEffect(() => {
+    setZoom(1);
+    scrollContainerRef.current?.scrollTo({ top: 0, left: 0 });
+  }, [page, documentId, source]);
+  useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null;
+      const isEditable =
+        target?.isContentEditable ||
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.tagName === "SELECT";
+      if (isEditable) return;
+
       if (event.key === "Escape") onClose();
       if (event.key === "ArrowLeft" && page > 1) onNavigate(page - 1);
       if (event.key === "ArrowRight" && page < totalPages) onNavigate(page + 1);
+      if (event.key === "+" || event.key === "=") {
+        event.preventDefault();
+        setZoom((value) => clampZoom(value + ZOOM_STEP));
+      }
+      if (event.key === "-") {
+        event.preventDefault();
+        setZoom((value) => clampZoom(value - ZOOM_STEP));
+      }
+      if (event.key === "0") {
+        event.preventDefault();
+        setZoom(1);
+      }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [page, totalPages, onNavigate, onClose]);
+
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    function onWheel(event: WheelEvent) {
+      if (!event.ctrlKey && !event.metaKey) return;
+      event.preventDefault();
+      setZoom((value) => clampZoom(value + (event.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP)));
+    }
+
+    container.addEventListener("wheel", onWheel, { passive: false });
+    return () => container.removeEventListener("wheel", onWheel);
+  }, []);
 
   useEffect(() => {
     const previous = document.body.style.overflow;
@@ -91,7 +141,49 @@ export function PageViewer({
             </button>
           </div>
         </header>
-        <div className="relative flex min-h-72 flex-1 items-center justify-center overflow-auto bg-muted/50 p-3 sm:p-4">
+        <div className="flex flex-wrap items-center justify-center gap-1.5 border-b border-border bg-card px-3 py-2">
+          <button
+            type="button"
+            onClick={() => setZoom((value) => clampZoom(value - ZOOM_STEP))}
+            disabled={zoom <= MIN_ZOOM}
+            aria-label="Zoom out"
+            title="Zoom out (-)"
+            className="inline-flex size-8 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Minus className="size-3.5" />
+          </button>
+          <output
+            aria-live="polite"
+            aria-label="Current zoom"
+            className="min-w-14 text-center font-mono text-xs tabular-nums text-foreground"
+          >
+            {Math.round(zoom * 100)}%
+          </output>
+          <button
+            type="button"
+            onClick={() => setZoom((value) => clampZoom(value + ZOOM_STEP))}
+            disabled={zoom >= MAX_ZOOM}
+            aria-label="Zoom in"
+            title="Zoom in (+)"
+            className="inline-flex size-8 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Plus className="size-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setZoom(1)}
+            disabled={zoom === 1}
+            title="Reset zoom (0)"
+            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <RotateCcw className="size-3.5" />
+            Reset
+          </button>
+        </div>
+        <div
+          ref={scrollContainerRef}
+          className="relative flex min-h-72 min-w-0 flex-1 overflow-auto overscroll-contain bg-muted/50 p-3 sm:p-4"
+        >
           {status === "loading" && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-muted-foreground">
               <Loader2 className="size-5 animate-spin" />
@@ -99,7 +191,7 @@ export function PageViewer({
             </div>
           )}
           {status === "error" ? (
-            <div className="text-center">
+            <div className="m-auto text-center">
               <p className="text-sm text-muted-foreground">
                 페이지를 불러오지 못했습니다. 서버에서 문서가 만료됐을 수 있습니다.
               </p>
@@ -123,7 +215,7 @@ export function PageViewer({
               </div>
             </div>
           ) : (
-            <div className="relative inline-block max-w-full">
+            <div className="relative m-auto w-fit max-w-full shrink-0" style={{ zoom }}>
               <img
                 key={`${documentId}-${page}-${attempt}`}
                 src={`${imageUrl}?attempt=${attempt}`}

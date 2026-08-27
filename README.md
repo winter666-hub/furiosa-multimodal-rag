@@ -158,6 +158,15 @@ passage used for grounding. When PyMuPDF can locate a stable text anchor, the ma
 rectangle is overlaid responsively on the rendered page. Source pages are rendered at higher
 resolution for easier inspection.
 
+## Grounded Answering
+
+The final generator is instructed to distinguish explicit document evidence from inference.
+Questions asking what the authors stated, concluded, identified as limitations, or proposed as
+future work are answered only from retrieved evidence. Unsupported information is reported as not
+found in the currently retrieved evidence rather than filled with plausible external knowledge.
+Document passages are treated as evidence rather than instructions, including when their text
+contains prompt-injection-like commands.
+
 Text-coordinate lookup is best-effort. Scanned or image-only pages, complex multi-column layouts,
 hyphenated text, formulas, and figure-only evidence may not produce a highlight. The page preview
 and referenced excerpt remain available as the fallback, without OCR or a user-facing error.
@@ -250,6 +259,8 @@ production-grade security layer.
 - The UI maintains one active document session at a time.
 - The current benchmark is small and based on one paper-oriented evaluation set.
 - Implicit visual questions remain the hardest routing cases.
+- Grounding is constrained by retrieval quality. A statement not present in the retrieved evidence
+  may still exist elsewhere in the document.
 - Conversation-log retention and deletion are not automated yet; a formal retention policy is
   required before long-term research use.
 
@@ -267,7 +278,7 @@ ignored. Keep Furiosa keys and proxy secrets in deployment stores; never commit 
 
 ## Tests
 
-Verified status: **132 backend tests passed**, **Ruff passed**, and the **frontend production build
+Verified status: **162 backend tests passed**, **Ruff passed**, and the **frontend production build
 succeeded**.
 
 The repository has historical frontend-wide CRLF/Prettier lint noise, so this README does not claim
