@@ -104,3 +104,82 @@ def test_unknown_excerpt_returns_empty_highlights(tmp_path: Path) -> None:
     located = find_text_highlights(pdf_path, 1, "not present on this page")
 
     assert located.rectangles == ()
+
+
+def test_highlight_prefers_body_passage_over_excerpt_header(tmp_path: Path) -> None:
+    pdf_path = tmp_path / "header-and-body.pdf"
+    document = pymupdf.open()
+    page = document.new_page(width=600, height=800)
+    page.insert_text((72, 40), "Example Research Paper")
+    page.insert_text(
+        (72, 300),
+        "The adaptive routing module chooses the visual path only when required.",
+    )
+    document.save(pdf_path)
+    document.close()
+
+    located = find_text_highlights(
+        pdf_path,
+        1,
+        "Example Research Paper. "
+        "The adaptive routing module chooses the visual path only when required.",
+    )
+
+    assert located.rectangles
+    assert all(rectangle.y > 250 for rectangle in located.rectangles)
+
+
+def test_highlight_scores_repeated_phrase_using_surrounding_context(tmp_path: Path) -> None:
+    pdf_path = tmp_path / "repeated-phrase.pdf"
+    document = pymupdf.open()
+    page = document.new_page(width=600, height=800)
+    page.insert_text((72, 180), "Repeated evidence phrase appears with unrelated setup.")
+    page.insert_text(
+        (72, 500),
+        "The adaptive module selects one route. Repeated evidence phrase appears here.",
+    )
+    document.save(pdf_path)
+    document.close()
+
+    located = find_text_highlights(
+        pdf_path,
+        1,
+        "The adaptive module selects one route. Repeated evidence phrase appears here.",
+    )
+
+    assert located.rectangles
+    assert all(rectangle.y > 450 for rectangle in located.rectangles)
+
+
+def test_low_confidence_common_prefix_returns_no_highlight(tmp_path: Path) -> None:
+    pdf_path = tmp_path / "no-confident-match.pdf"
+    document = pymupdf.open()
+    document.new_page().insert_text((72, 72), "Introduction")
+    document.save(pdf_path)
+    document.close()
+
+    located = find_text_highlights(
+        pdf_path, 1, "Introduction describes evidence that does not exist anywhere."
+    )
+
+    assert located.rectangles == ()
+
+
+def test_low_overlap_matching_sentence_returns_no_highlight(tmp_path: Path) -> None:
+    pdf_path = tmp_path / "low-overlap.pdf"
+    document = pymupdf.open()
+    document.new_page().insert_text(
+        (72, 200), "This method improves performance across several benchmark datasets."
+    )
+    document.save(pdf_path)
+    document.close()
+    unrelated_context = " ".join(f"unrelated-{index}" for index in range(80))
+
+    located = find_text_highlights(
+        pdf_path,
+        1,
+        "This method improves performance across several benchmark datasets. "
+        + unrelated_context,
+    )
+
+    assert located.rectangles == ()
