@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import csv
+import json
 from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
 
+from furiosa_rag.cli.benchmark_e2e import _clients
+from furiosa_rag.config import Settings
 from furiosa_rag.e2e_benchmark import (
     export_e2e_csv,
     load_e2e_jsonl,
@@ -160,6 +163,39 @@ def test_csv_export_contains_required_fields(tmp_path: Path) -> None:
     assert row["vision_used"] == "True"
     assert row["answer"] == "visual answer"
     assert row["error"] == ""
+    assert row["paper"] == ""
+    assert row["expected_route"] == ""
+    assert row["expected_page"] == ""
+    assert row["expected_visual_evidence"] == ""
+
+
+def test_csv_export_contains_optional_metadata(tmp_path: Path) -> None:
+    pipeline = Mock()
+    pipeline.answer_multimodal.return_value = _visual_result()
+    item = {
+        "id": "Q1",
+        "question": "visual q",
+        "category": "implicit_visual",
+        "paper": "bert",
+        "expected_route": "VISUAL_REQUIRED",
+        "expected_page": 5,
+        "expected_visual_evidence": "BERT Figure 2",
+    }
+    results = run_e2e(
+        [item], "paper.pdf", strategy="always_vision",
+        text_pipeline=Mock(), multimodal_pipeline=pipeline,
+    )
+    output = tmp_path / "e2e.csv"
+
+    export_e2e_csv(results, output)
+
+    with output.open(encoding="utf-8", newline="") as source:
+        row = next(csv.DictReader(source))
+    assert row["paper"] == "bert"
+    assert row["expected_route"] == "VISUAL_REQUIRED"
+    assert row["expected_page"] == "5"
+    assert row["expected_visual_evidence"] == "BERT Figure 2"
+    assert row["selected_page"] == "3"
 
 
 def test_pipeline_error_is_recorded_and_next_question_continues() -> None:
@@ -187,3 +223,42 @@ def test_small_e2e_dataset_has_five_questions_per_category() -> None:
         category: sum(row["category"] == category for row in rows)
         for category in ("text", "explicit_visual", "implicit_visual")
     } == {"text": 5, "explicit_visual": 5, "implicit_visual": 5}
+
+
+def test_load_e2e_jsonl_keeps_legacy_row_unchanged(tmp_path: Path) -> None:
+    item = {"id": "Q1", "question": "text q", "category": "text"}
+    dataset = tmp_path / "legacy.jsonl"
+    dataset.write_text(json.dumps(item) + "\n", encoding="utf-8")
+
+    assert load_e2e_jsonl(dataset) == [item]
+
+
+def test_load_e2e_jsonl_preserves_optional_metadata(tmp_path: Path) -> None:
+    item = {
+        "id": "Q1",
+        "question": "visual q",
+        "category": "implicit_visual",
+        "paper": "bert",
+        "expected_route": "VISUAL_REQUIRED",
+        "expected_page": 5,
+        "expected_visual_evidence": "BERT Figure 2",
+    }
+    dataset = tmp_path / "ack.jsonl"
+    dataset.write_text(json.dumps(item) + "\n", encoding="utf-8")
+
+    assert load_e2e_jsonl(dataset) == [item]
+
+
+def test_e2e_clients_use_separate_general_and_vision_timeouts() -> None:
+    settings = Settings(
+        api_key="test-key",
+        request_timeout=10,
+        vision_request_timeout=60,
+        vision_max_tokens=256,
+        endpoints=(),
+    )
+
+    client, vision_client = _clients(settings)
+
+    assert client.timeout == 10
+    assert vision_client.timeout == 60

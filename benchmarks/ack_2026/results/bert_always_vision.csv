@@ -1,0 +1,70 @@
+id,question,category,paper,expected_route,expected_page,expected_visual_evidence,strategy,route,routing_reason,routing_latency_ms,vision_used,selected_page,query_embedding_latency_ms,reranking_latency_ms,page_rendering_latency_ms,vision_analysis_latency_ms,answer_generation_latency_ms,total_latency_ms,cache_state,answer,sources,error
+T08,BERT의 Masked Language Model 학습 방법을 설명해 주세요.,text,bert,TEXT_ONLY,,,always_vision,VISUAL_REQUIRED,always_vision strategy,0.0,True,1,892.3603002913296,2561.9223001413047,69.52679995447397,5883.903199806809,4650.357700418681,14076.9884,warm,"BERT의 Masked Language Model (MLM) 학습 방법은 입력 텍스트에서 일부 토큰을 무작위로 마스킹하고, 마스킹된 토큰의 원래 어휘 ID를 예측하는 것을 목표로 합니다. 이는 ""Cloze task"" (Taylor, 1953)에서 영감을 받은 pre-training objective입니다. MLM은 BERT가 양방향 맥락을 학습할 수 있도록 하며, 기존의 단방향 언어 모델(예: OpenAI GPT)의 제한을 극복합니다. MLM은 입력 토큰의 15%를 마스킹하고, 이 중 80%는 [MASK] 토큰으로 대체되며, 10%는 무작위 단어로 대체되고, 나머지 10%는 변경되지 않은 상태로 유지됩니다. 이러한 절차는 Transformer 인코더가 예측이 필요한 단어나 무작위로 대체된 단어를 알 수 없도록 하여, 모든 입력 토큰에 대한 분포적 맥락 표현을 강제합니다. MLM은 BERT의 pre-training 단계에서 사용되며, 이후 fine-tuning 단계에서 다양한 언어 이해 작업에 효과적으로 적용됩니다.","[{""page"": 1, ""chunk"": ""page-1-chunk-1"", ""retrieval_score"": 0.6736361384391785, ""rerank_score"": 0.9399133324623108}, {""page"": 12, ""chunk"": ""page-12-chunk-1"", ""retrieval_score"": 0.6551369428634644, ""rerank_score"": 0.7943849563598633}, {""page"": 3, ""chunk"": ""page-3-chunk-1"", ""retrieval_score"": 0.6595632433891296, ""rerank_score"": 0.7772998809814453}]",
+T09,BERT에서 Next Sentence Prediction을 사용하는 목적은 무엇인가요?,text,bert,TEXT_ONLY,,,always_vision,VISUAL_REQUIRED,always_vision strategy,0.0,True,4,884.3697002157569,2556.9414999336004,68.35730001330376,6636.173499748111,2954.659499693662,13114.7691,warm,"Next Sentence Prediction (NSP)은 BERT가 두 문장 간의 관계를 이해하는 데 중요한 다운스트림 작업(예: 질문 응답, 자연어 추론)을 위해 훈련되도록 하기 위한 목적입니다. 이 작업은 단순한 언어 모델링만으로는 포착할 수 없는 정보를 제공하며, 문장 A와 B 간의 관계를 학습하게 합니다. 문장 A와 B를 선택할 때, 50%의 확률로 B가 A의 실제 다음 문장이 되며 (IsNext), 나머지 50%는 무작위로 선택된 문장이 됩니다 (NotNext). 이 이진 분류 작업은 QA와 NLI 작업에 매우 유익하다고 명시되어 있습니다.","[{""page"": 4, ""chunk"": ""page-4-chunk-1"", ""retrieval_score"": 0.6611778736114502, ""rerank_score"": 0.9899863600730896}, {""page"": 13, ""chunk"": ""page-13-chunk-1"", ""retrieval_score"": 0.6353883147239685, ""rerank_score"": 0.9802808165550232}, {""page"": 4, ""chunk"": ""page-4-chunk-2"", ""retrieval_score"": 0.6876015663146973, ""rerank_score"": 0.957912266254425}]",
+T10,BERTBASE와 BERTLARGE의 주요 구조적 차이를 설명해 주세요.,text,bert,TEXT_ONLY,,,always_vision,VISUAL_REQUIRED,always_vision strategy,0.0,True,3,890.0362001731992,2556.221399921924,85.63080010935664,6142.523100133985,5066.049400251359,14755.3112,warm,"BERTBASE와 BERTLARGE의 주요 구조적 차이점은 다음과 같습니다:
+
+1. **Transformer 블록의 수 (L)**: BERTBASE는 12개의 레이어를 사용하지만, BERTLARGE는 24개의 레이어를 사용합니다.
+2. **히든 사이즈 (H)**: BERTBASE는 768의 히든 사이즈를 사용하지만, BERTLARGE는 1024의 히든 사이즈를 사용합니다.
+3. **셀프 어텐션 헤드의 수 (A)**: BERTBASE는 12개의 어텐션 헤드를 사용하지만, BERTLARGE는 16개의 어텐션 헤드를 사용합니다.
+4. **총 파라미터 수**: BERTBASE는 약 110M의 파라미터를 가지며, BERTLARGE는 약 340M의 파라미터를 가집니다.
+
+이러한 차이점은 BERTLARGE가 BERTBASE보다 더 깊고 넓은 구조를 가지고 있음을 나타냅니다. 두 모델은 동일한 아키텍처를 기반으로 하며, 주요 차이점은 모델의 규모(레이어 수, 히든 사이즈, 어텐션 헤드 수, 파라미터 수)에 있습니다.","[{""page"": 3, ""chunk"": ""page-3-chunk-1"", ""retrieval_score"": 0.5822420716285706, ""rerank_score"": 0.9879462122917175}, {""page"": 8, ""chunk"": ""page-8-chunk-2"", ""retrieval_score"": 0.5877737402915955, ""rerank_score"": 0.9532750844955444}, {""page"": 14, ""chunk"": ""page-14-chunk-1"", ""retrieval_score"": 0.5921468138694763, ""rerank_score"": 0.14706452190876007}]",
+E08,Figure 1을 기준으로 BERT의 pre-training과 fine-tuning 구조 차이를 설명해 주세요.,explicit_visual,bert,VISUAL_REQUIRED,3,BERT Figure 1,always_vision,VISUAL_REQUIRED,always_vision strategy,0.0,True,3,904.112400021404,2575.4267000593245,110.11609993875027,6593.958199955523,5287.288899999112,15488.3329,warm,"Figure 1에 따르면, BERT의 pre-training과 fine-tuning 구조 차이는 다음과 같습니다:
+
+1. **입력 데이터**:
+   - **Pre-training**: ""Unlabeled Sentence A and B Pair""가 입력으로 사용되며, [CLS]와 [SEP] 토큰이 추가됩니다.
+   - **Fine-tuning**: ""Question Answer Pair""가 입력으로 사용되며, 동일한 [CLS]와 [SEP] 토큰이 포함됩니다.
+
+2. **출력층**:
+   - **Pre-training**: NSP(Next Sentence Prediction)와 Masked LM(Masked Language Model)의 두 가지 태스크를 위한 출력층이 사용됩니다.
+   - **Fine-tuning**: 특정 다운스트림 작업에 맞게 출력층이 조정됩니다. 예를 들어, SQuAD의 경우 ""Start/End Span"" 예측을 위한 출력층이 추가됩니다.
+
+3. **BERT 아키텍처**:
+   - 두 단계 모두 동일한 BERT 인코더 구조를 사용합니다. 차이점은 출력층만 작업에 따라 달라지며, 인코더 구조는 동일하게 유지됩니다.
+
+4. **학습 방식**:
+   - **Pre-training**: 언어 모델링을 위한 다중 태스크로 학습됩니다.
+   - **Fine-tuning**: 특정 다운스트림 작업에 맞게 학습되며, pre-training에서 학습된 파라미터를 기반으로 모든 파라미터가 조정됩니다.","[{""page"": 3, ""chunk"": ""page-3-chunk-1"", ""retrieval_score"": 0.6723346710205078, ""rerank_score"": 0.998498797416687}, {""page"": 13, ""chunk"": ""page-13-chunk-1"", ""retrieval_score"": 0.6694380640983582, ""rerank_score"": 0.9919379353523254}, {""page"": 1, ""chunk"": ""page-1-chunk-1"", ""retrieval_score"": 0.6503944993019104, ""rerank_score"": 0.9811668992042542}]",
+E09,"Figure 2를 기준으로 token embedding, segment embedding, position embedding이 입력 표현을 구성하는 방식을 설명해 주세요.",explicit_visual,bert,VISUAL_REQUIRED,5,BERT Figure 2,always_vision,VISUAL_REQUIRED,always_vision strategy,0.0,True,5,894.8695999570191,2560.9257998876274,74.02110006660223,6555.201800074428,7294.364000204951,17393.8633,warm,"Figure 2에 따르면, BERT의 입력 표현은 토큰 임베딩, 세그먼트 임베딩, 위치 임베딩의 세 가지 요소를 더한 형태로 구성됩니다. 각 토큰은 이 세 가지 임베딩 벡터를 합산하여 최종 입력 표현을 생성합니다.
+
+1. **토큰 임베딩(Token Embeddings)**: 각 토큰은 고유한 토큰 임베딩 벡터를 가집니다. 예를 들어, `[CLS]`는 `E[CLS]`, `my`는 `E_my`, `dog`는 `E_dog` 등으로 표현됩니다. 이는 토큰의 의미적 정보를 담고 있습니다.
+
+2. **세그먼트 임베딩(Segment Embeddings)**: 입력 시퀀스가 단일 문장 또는 문장 쌍일 수 있으므로, 두 문장을 구분하기 위해 세그먼트 임베딩이 사용됩니다. 첫 번째 문장의 토큰은 `E_A`로, 두 번째 문장의 토큰은 `E_B`로 표시됩니다. 예를 들어, `[CLS] he likes play ##ing [SEP]`는 `E_A`를, `my dog is cute [SEP]`는 `E_B`를 사용합니다.
+
+3. **위치 임베딩(Position Embeddings)**: 토큰의 순서 정보를 유지하기 위해 위치 임베딩이 사용됩니다. 각 토큰은 고유한 위치 임베딩 벡터를 가지며, 예를 들어, 첫 번째 토큰 `[CLS]`는 `E_0`, 두 번째 토큰 `he`는 `E_1`, 세 번째 토큰 `likes`는 `E_2` 등으로 표현됩니다.
+
+이 세 가지 임베딩은 각 토큰에 대해 수직으로 정렬되어 있으며, 최종 입력 표현은 이 세 임베딩 벡터의 합으로 계산됩니다. 이는 각 토큰 위에 ""+"" 기호가 표시되어 있음을 통해 시각적으로 확인할 수 있습니다.","[{""page"": 5, ""chunk"": ""page-5-chunk-1"", ""retrieval_score"": 0.5535924434661865, ""rerank_score"": 0.9979493021965027}, {""page"": 4, ""chunk"": ""page-4-chunk-1"", ""retrieval_score"": 0.5349045395851135, ""rerank_score"": 0.9965165853500366}, {""page"": 1, ""chunk"": ""page-1-chunk-1"", ""retrieval_score"": 0.47795215249061584, ""rerank_score"": 0.06754669547080994}]",
+E10,논문의 downstream task 성능 Table을 기준으로 BERTBASE와 BERTLARGE의 성능을 비교해 주세요.,explicit_visual,bert,VISUAL_REQUIRED,6,BERT Table 1,always_vision,VISUAL_REQUIRED,always_vision strategy,0.0,True,9,899.764500092715,2559.9811002612114,65.61559997498989,6592.094199731946,3381.3598002307117,13514.3965,warm,"BERTLARGE는 BERTBASE보다 CoNLL-2003 Named Entity Recognition 태스크에서 약간 더 높은 성능을 보입니다. 구체적으로, BERTLARGE는 Dev F1 96.6, Test F1 92.8를 기록했으며, BERTBASE는 Dev F1 96.4, Test F1 92.4를 기록했습니다. 이에 따라 BERTLARGE는 Test F1에서 0.4 포인트, Dev F1에서 0.2 포인트 더 높은 성능을 나타냈습니다. 논문 본문에서는 BERTLARGE가 BERTBASE보다 0.3 F1 포인트 더 높은 성능을 보였다고 언급하며, 이는 Table 7의 결과와 일치합니다. 두 모델 모두 state-of-the-art 방법들과 경쟁적인 성능을 보였습니다.","[{""page"": 9, ""chunk"": ""page-9-chunk-1"", ""retrieval_score"": 0.5857546329498291, ""rerank_score"": 0.9736446738243103}, {""page"": 8, ""chunk"": ""page-8-chunk-1"", ""retrieval_score"": 0.5807668566703796, ""rerank_score"": 0.971563994884491}, {""page"": 8, ""chunk"": ""page-8-chunk-2"", ""retrieval_score"": 0.5700555443763733, ""rerank_score"": 0.7122321724891663}]",
+I08,두 문장으로 이루어진 입력에서 각 token에 적용되는 세 종류의 embedding이 서로 어떤 위치 관계로 결합되는지 설명해 주세요.,implicit_visual,bert,VISUAL_REQUIRED,5,BERT Figure 2,always_vision,VISUAL_REQUIRED,always_vision strategy,0.0,True,4,877.1528000943363,2556.848700158298,69.16389986872673,6589.9685001932085,2336.7987000383437,12441.4721,warm,"두 문장으로 이루어진 입력에서 각 token의 입력 표현은 token embedding, segment embedding, position embedding의 세 가지 embedding이 결합되어 구성됩니다. 이 세 embedding은 동일한 위치의 token에 대해 각각 계산된 후, 벡터 수준에서 합산(summing)되어 최종 입력 표현이 됩니다. 즉, 각 token에 대해 token embedding은 단어 자체의 의미를, segment embedding은 해당 token이 문장 A인지 B인지 구분하는 정보를, position embedding은 token의 위치 정보를 나타내며, 이 세 정보는 수학적으로 더해져 결합됩니다.","[{""page"": 4, ""chunk"": ""page-4-chunk-1"", ""retrieval_score"": 0.48993414640426636, ""rerank_score"": 0.9924227595329285}, {""page"": 5, ""chunk"": ""page-5-chunk-1"", ""retrieval_score"": 0.4883943796157837, ""rerank_score"": 0.9896718263626099}, {""page"": 4, ""chunk"": ""page-4-chunk-2"", ""retrieval_score"": 0.47401270270347595, ""rerank_score"": 0.06853749603033066}]",
+I09,"동일하게 pre-trained된 BERT가 MNLI, NER, SQuAD에 적용될 때 출력 구조가 서로 어떻게 달라지는지 비교해 주세요.",implicit_visual,bert,VISUAL_REQUIRED,3,BERT Figure 1,always_vision,VISUAL_REQUIRED,always_vision strategy,0.0,True,3,894.7238000109792,2558.9666003361344,87.20469987019897,6577.9148996807635,4909.708499908447,15041.0329,warm,"BERT는 동일한 pre-trained 모델을 사용하여 MNLI, NER, SQuAD와 같은 다양한 작업에 적용되며, 각 작업에 따라 출력 구조가 달라집니다:
+
+1. **MNLI (Multi-Genre Natural Language Inference)**:
+   - BERT 출력 위에 하나의 출력 레이어가 추가됩니다.
+   - 이 레이어는 문장 쌍의 의미적 관계(예: 동의, 반의, 중립)를 분류하는 데 사용됩니다.
+   - 출력은 단일 레이블입니다.
+
+2. **NER (Named Entity Recognition)**:
+   - BERT 출력 위에 각 토큰에 대해 엔티티 태그를 예측하는 출력 레이어가 추가됩니다.
+   - 출력은 토큰 수만큼의 태그 시퀀스입니다.
+
+3. **SQuAD (Question Answering)**:
+   - BERT 출력 위에 ""Start/End Span"" 예측을 위한 두 개의 별도 출력 레이어가 추가됩니다.
+   - 각 토큰에 대해 시작 위치와 끝 위치를 예측하여 답변 스팬을 추출합니다.
+
+이 세 작업은 모두 동일한 BERT pre-trained 모델을 기반으로 하되, 작업에 맞는 출력 레이어 구조가 달라집니다.","[{""page"": 3, ""chunk"": ""page-3-chunk-1"", ""retrieval_score"": 0.6637226939201355, ""rerank_score"": 0.9683812260627747}, {""page"": 1, ""chunk"": ""page-1-chunk-1"", ""retrieval_score"": 0.6399093866348267, ""rerank_score"": 0.9032942056655884}, {""page"": 13, ""chunk"": ""page-13-chunk-1"", ""retrieval_score"": 0.6271248459815979, ""rerank_score"": 0.5698526501655579}]",
+I10,"동일한 BERT encoder가 문장 단위 classification, token 단위 prediction, question answering에 적용될 때 출력 표현이 각각 어느 위치에서 사용되는지 비교해 주세요.",implicit_visual,bert,VISUAL_REQUIRED,3,BERT Figure 1,always_vision,VISUAL_REQUIRED,always_vision strategy,0.0,True,5,901.9239000044763,2558.4845999255776,75.52819978445768,6638.524000067264,5369.4802997633815,15555.916,warm,"동일한 BERT encoder가 문장 단위 classification, token 단위 prediction, question answering에 적용될 때 출력 표현이 사용되는 위치는 다음과 같이 비교됩니다:
+
+1. **문장 단위 classification**:
+   - **출력 표현 사용 위치**: [CLS] 토큰에 해당하는 임베딩 (E[CLS])이 사용됩니다.
+   - **설명**: [CLS] 토큰의 최종 숨겨진 벡터는 텍스트의 전체 문맥을 요약한 표현으로, 분류 작업에 사용됩니다.
+
+2. **Token 단위 prediction**:
+   - **출력 표현 사용 위치**: 각 토큰에 해당하는 임베딩 (예: E_my, E_dog, E_is 등)이 사용됩니다.
+   - **설명**: 각 토큰의 표현이 개별적으로 출력층에 전달되어 태깅 또는 토큰 예측에 사용됩니다.
+
+3. **Question Answering**:
+   - **출력 표현 사용 위치**: 입력 시퀀스 내 각 토큰의 표현 (예: E_my, E_dog, ..., E_#ing)이 사용됩니다.
+   - **설명**: 이 표현들은 시작 및 종료 위치를 예측하는 데 사용되며, [CLS] 토큰은 사용되지 않습니다.
+
+4. **공통점**:
+   - 세 작업 모두 입력 표현이 토큰 임베딩, 세그먼트 임베딩, 위치 임베딩의 합으로 구성됩니다.","[{""page"": 5, ""chunk"": ""page-5-chunk-1"", ""retrieval_score"": 0.6058676838874817, ""rerank_score"": 0.985042929649353}, {""page"": 4, ""chunk"": ""page-4-chunk-1"", ""retrieval_score"": 0.6112681031227112, ""rerank_score"": 0.9773707389831543}, {""page"": 3, ""chunk"": ""page-3-chunk-1"", ""retrieval_score"": 0.5978266000747681, ""rerank_score"": 0.7969253659248352}]",

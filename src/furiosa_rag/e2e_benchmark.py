@@ -14,8 +14,15 @@ from furiosa_rag.router import QueryRoute, QueryRouter
 
 STRATEGIES = ("always_vision", "llm", "adaptive")
 REQUIRED_FIELDS = {"id", "question", "category"}
+OPTIONAL_METADATA_FIELDS = (
+    "paper",
+    "expected_route",
+    "expected_page",
+    "expected_visual_evidence",
+)
 CSV_FIELDS = [
-    "id", "question", "category", "strategy", "route", "routing_reason",
+    "id", "question", "category", *OPTIONAL_METADATA_FIELDS,
+    "strategy", "route", "routing_reason",
     "routing_latency_ms", "vision_used", "selected_page",
     "query_embedding_latency_ms", "reranking_latency_ms",
     "page_rendering_latency_ms", "vision_analysis_latency_ms",
@@ -34,8 +41,8 @@ class MultimodalPipeline(Protocol):
     ) -> MultimodalRagAnswer: ...
 
 
-def load_e2e_jsonl(path: str | Path) -> list[dict[str, str]]:
-    rows: list[dict[str, str]] = []
+def load_e2e_jsonl(path: str | Path) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
     with Path(path).open(encoding="utf-8") as source:
         for line_number, line in enumerate(source, start=1):
             if not line.strip():
@@ -51,7 +58,15 @@ def load_e2e_jsonl(path: str | Path) -> list[dict[str, str]]:
                 )
             if row["category"] not in {"text", "explicit_visual", "implicit_visual"}:
                 raise ValueError(f"invalid category on line {line_number}")
-            rows.append({field: str(row[field]) for field in REQUIRED_FIELDS})
+            loaded_row: dict[str, Any] = {
+                field: str(row[field]) for field in REQUIRED_FIELDS
+            }
+            loaded_row.update(
+                (field, row[field])
+                for field in OPTIONAL_METADATA_FIELDS
+                if field in row
+            )
+            rows.append(loaded_row)
     if not rows:
         raise ValueError("E2E benchmark dataset is empty")
     return rows
@@ -78,7 +93,7 @@ def _latency(result: RagAnswer | MultimodalRagAnswer, key: str) -> float:
 
 
 def run_e2e(
-    rows: list[dict[str, str]],
+    rows: list[dict[str, Any]],
     pdf_path: str | Path,
     *,
     strategy: str,
@@ -96,6 +111,10 @@ def run_e2e(
         total_started = time.perf_counter_ns()
         row: dict[str, Any] = {
             **item,
+            **{
+                field: item.get(field, "")
+                for field in OPTIONAL_METADATA_FIELDS
+            },
             "strategy": strategy,
             "route": "",
             "routing_reason": "",

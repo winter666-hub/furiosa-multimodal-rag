@@ -27,6 +27,13 @@ def _endpoint(settings: Settings, name: str) -> ModelEndpoint:
     return next(endpoint for endpoint in settings.endpoints if endpoint.name == name)
 
 
+def _clients(settings: Settings) -> tuple[FuriosaClient, FuriosaClient]:
+    return (
+        FuriosaClient(settings.api_key, settings.request_timeout),
+        FuriosaClient(settings.api_key, settings.vision_request_timeout),
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Benchmark E2E RAG routing strategies")
     parser.add_argument("pdf")
@@ -41,7 +48,7 @@ def main() -> int:
     args = parser.parse_args()
 
     settings = Settings.from_env()
-    client = FuriosaClient(settings.api_key, settings.request_timeout)
+    client, vision_client = _clients(settings)
     config = RagConfig(
         chunk_size=args.chunk_size,
         chunk_overlap=args.chunk_overlap,
@@ -61,7 +68,7 @@ def main() -> int:
         embedding,
         reranker,
         llm,
-        vision=FuriosaVision(_endpoint(settings, "vision"), client),
+        vision=FuriosaVision(_endpoint(settings, "vision"), vision_client),
         config=config,
         cache=cache,
     )
