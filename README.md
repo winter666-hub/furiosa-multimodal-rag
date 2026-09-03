@@ -1,4 +1,4 @@
-# Furiosa Agentic Paper RAG
+# Furiosa Adaptive Multimodal Paper RAG
 
 A selective multimodal Paper RAG system that accepts a research paper PDF, retrieves evidence,
 selects visual reasoning only when needed, and returns an answer with verifiable source pages.
@@ -96,7 +96,7 @@ claim to run Direct NPU Vision.
 - Process-local rate/concurrency limits and bounded TTL/storage cleanup
 - Trusted Cloudflare-to-Render client-IP forwarding with a shared proxy secret
 
-## Research Results
+## Preliminary Benchmark
 
 The checked-in 15-question E2E evaluation compares always-on vision with adaptive routing. The
 dataset contains five text, five explicit-visual, and five implicit-visual questions.
@@ -127,7 +127,7 @@ The answer-quality artifact is preliminary rather than a completed 15/15 evaluat
 45 strategy-question rows, with 44 successful judge results and one recorded judge parsing error.
 See the [Benchmark Report](benchmarks/README.md) for the preliminary strategy aggregates.
 
-## Router-Only Benchmark
+### Router-Only Benchmark
 
 The separate 60-question holdout measures routing overhead independently from retrieval and answer
 generation:
@@ -140,6 +140,25 @@ generation:
 
 The [Benchmark Report](benchmarks/README.md) records the full holdout table. These router-only
 numbers are intentionally kept separate from the E2E latency table.
+
+## ACK 2026 Follow-up Benchmark
+
+The follow-up evaluation uses 30 questions across the Transformer, GPT-2, and BERT papers: 10
+text, 10 explicit-visual, and 10 implicit-visual queries. It compares Always Vision, Pure LLM
+Router, and Adaptive Router using the hosted experiment models Qwen3-Embedding-8B,
+Qwen3-Reranker-8B, Qwen3-32B-FP8, and Qwen3-VL-32B-Instruct.
+
+| Metric | Always Vision | Pure LLM Router | Adaptive Router | Adaptive change vs. baseline |
+|---|---:|---:|---:|---:|
+| Routing accuracy | N/A | 93.3% | 93.3% | No change vs. Pure LLM Router |
+| Average routing latency | N/A | 202.2 ms | 142.1 ms | -29.7% vs. Pure LLM Router |
+| Vision calls | 30 | N/A | 18 | -40.0% vs. Always Vision |
+| Average E2E latency | 13.221 s | N/A | 10.790 s | -18.4% vs. Always Vision |
+
+The Adaptive Router achieved 90.0% visual recall and 55.0% top-1 evidence page accuracy. Two
+implicit-visual queries were false negatives. These results are specific to this 30-query
+follow-up benchmark and are kept separate from the preliminary 15-query E2E and 60-query
+router-only results above.
 
 ## Public Demo Usage
 
@@ -258,7 +277,9 @@ production-grade security layer.
 - Rate limits, concurrency state, and active-document tracking are process-local.
 - The UI maintains one active document session at a time.
 - The current benchmark is small and based on one paper-oriented evaluation set.
-- Implicit visual questions remain the hardest routing cases.
+- The research visual path currently sends a single page to Vision.
+- Implicit visual queries can produce routing false negatives; the follow-up benchmark had two.
+- Top-1 evidence page selection is imperfect; follow-up benchmark accuracy was 55.0%.
 - Grounding is constrained by retrieval quality. A statement not present in the retrieved evidence
   may still exist elsewhere in the document.
 - Conversation-log retention and deletion are not automated yet; a formal retention policy is
@@ -269,6 +290,7 @@ production-grade security layer.
 - A defined conversation-log retention/deletion policy and operator access controls
 - Durable document storage and distributed rate limiting
 - A public Direct-NPU visual path and better implicit-visual routing
+- Visual-aware retrieval and multi-page Vision
 - Larger multi-domain benchmarks, multi-document RAG, and asynchronous indexing
 
 ## Security
